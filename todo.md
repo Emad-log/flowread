@@ -49,4 +49,7 @@
 - [x] Add minimal haptic dial with vertical scroll control
 - [x] Update GitHub with haptic dial
 - [x] Fix haptic dial functionality - rewrite with reliable gesture handling
-- [ ] Update GitHub with fixed dial
+- [x] Update GitHub with fixed dial
+- [x] Replace circular dial with scrollable ruler picker
+- [x] Set light mode as default appearance
+- [ ] Update GitHub with changes
