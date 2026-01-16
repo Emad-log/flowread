@@ -1,0 +1,22 @@
+# Project TODO
+
+- [x] Update theme colors for minimal aesthetic (warm off-white, true black dark mode)
+- [x] Configure tab navigation (Library, Discover, Settings)
+- [x] Add icon mappings for tabs
+- [x] Create Library screen with book cards
+- [x] Create Discover screen with search functionality
+- [x] Create Settings screen with preferences
+- [x] Implement Open Library API integration for book search
+- [x] Create Book Detail modal/screen
+- [x] Implement book content fetching from Gutenberg/Open Library
+- [x] Build RSVP reader component with word-by-word display
+- [x] Add ORP (Optimal Recognition Point) highlighting
+- [x] Implement speed control (WPM adjustment)
+- [x] Add play/pause functionality for RSVP
+- [x] Create reading progress tracking
+- [x] Implement AsyncStorage for library persistence
+- [x] Implement AsyncStorage for settings persistence
+- [x] Create empty states for library
+- [x] Add haptic feedback on interactions
+- [x] Generate custom app logo
+- [x] Update app branding in config
