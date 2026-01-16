@@ -1,18 +1,15 @@
-import { useRef, useCallback } from 'react';
-import { View, Text, StyleSheet, Platform } from 'react-native';
-import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import { useRef, useCallback, useState } from 'react';
+import { View, Text, StyleSheet, Platform, PanResponder } from 'react-native';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
   withSpring,
-  runOnJS,
 } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 
 const MIN_WPM = 100;
 const MAX_WPM = 800;
 const WPM_STEP = 25;
-const SENSITIVITY = 0.8; // Lower = more sensitive
 
 interface HapticDialProps {
   value: number;
@@ -29,9 +26,11 @@ export function HapticDial({
   mutedColor,
   borderColor,
 }: HapticDialProps) {
-  const translateY = useSharedValue(0);
-  const lastValue = useRef(value);
-  const accumulatedDelta = useRef(0);
+  const rotation = useSharedValue(0);
+  const [localValue, setLocalValue] = useState(value);
+  const startY = useRef(0);
+  const startValue = useRef(value);
+  const lastStepValue = useRef(value);
 
   const triggerHaptic = useCallback(() => {
     if (Platform.OS !== 'web') {
@@ -39,51 +38,55 @@ export function HapticDial({
     }
   }, []);
 
-  const updateValue = useCallback((delta: number) => {
-    accumulatedDelta.current += delta;
-    
-    // Calculate how many steps based on accumulated delta
-    const stepsToMove = Math.floor(Math.abs(accumulatedDelta.current) / (WPM_STEP * SENSITIVITY));
-    
-    if (stepsToMove > 0) {
-      const direction = accumulatedDelta.current > 0 ? -1 : 1; // Inverted: scroll up = increase
-      const wpmChange = stepsToMove * WPM_STEP * direction;
-      const newValue = Math.max(MIN_WPM, Math.min(MAX_WPM, lastValue.current + wpmChange));
-      
-      if (newValue !== lastValue.current) {
-        lastValue.current = newValue;
-        accumulatedDelta.current = 0;
-        triggerHaptic();
-        onChange(newValue);
-      } else {
-        // Reset if we hit bounds
-        accumulatedDelta.current = 0;
-      }
-    }
-  }, [onChange, triggerHaptic]);
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onPanResponderGrant: (_, gestureState) => {
+        startY.current = gestureState.y0;
+        startValue.current = localValue;
+        lastStepValue.current = localValue;
+      },
+      onPanResponderMove: (_, gestureState) => {
+        const deltaY = gestureState.moveY - startY.current;
+        // Invert: drag up = increase, drag down = decrease
+        // Each 20px of movement = 1 step (25 WPM)
+        const steps = Math.round(-deltaY / 20);
+        const newValue = Math.max(MIN_WPM, Math.min(MAX_WPM, startValue.current + (steps * WPM_STEP)));
+        
+        // Update rotation for visual feedback
+        rotation.value = -deltaY * 0.5;
+        
+        if (newValue !== localValue) {
+          setLocalValue(newValue);
+          onChange(newValue);
+          
+          // Trigger haptic on each step change
+          if (Math.abs(newValue - lastStepValue.current) >= WPM_STEP) {
+            triggerHaptic();
+            lastStepValue.current = newValue;
+          }
+        }
+      },
+      onPanResponderRelease: () => {
+        rotation.value = withSpring(0, { damping: 15, stiffness: 150 });
+      },
+    })
+  ).current;
 
-  const panGesture = Gesture.Pan()
-    .onStart(() => {
-      accumulatedDelta.current = 0;
-    })
-    .onUpdate((event) => {
-      translateY.value = event.translationY * 0.3; // Damped visual feedback
-      runOnJS(updateValue)(event.translationY);
-    })
-    .onEnd(() => {
-      translateY.value = withSpring(0, { damping: 20, stiffness: 300 });
-      accumulatedDelta.current = 0;
-    });
+  // Keep local value in sync with prop
+  if (value !== localValue && !panResponder) {
+    setLocalValue(value);
+  }
 
   const dialStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: translateY.value * 0.1 }],
+    transform: [{ rotate: `${rotation.value}deg` }],
   }));
 
-  // Generate tick marks for visual feedback
+  // Generate tick marks
   const ticks = [];
-  const tickCount = 12;
-  for (let i = 0; i < tickCount; i++) {
-    const angle = (i / tickCount) * 360;
+  for (let i = 0; i < 12; i++) {
+    const angle = (i / 12) * 360;
     ticks.push(angle);
   }
 
@@ -91,15 +94,15 @@ export function HapticDial({
     <View style={styles.container}>
       {/* Value display */}
       <Text style={[styles.value, { color: foregroundColor }]}>
-        {value}
+        {localValue}
       </Text>
       <Text style={[styles.unit, { color: mutedColor }]}>
         wpm
       </Text>
 
       {/* Dial */}
-      <GestureDetector gesture={panGesture}>
-        <Animated.View style={[styles.dialContainer, dialStyle]}>
+      <View {...panResponder.panHandlers}>
+        <Animated.View style={[styles.dialWrapper, dialStyle]}>
           <View style={[styles.dial, { borderColor }]}>
             {/* Tick marks */}
             {ticks.map((angle, index) => (
@@ -115,23 +118,30 @@ export function HapticDial({
                     styles.tick,
                     { 
                       backgroundColor: index === 0 ? foregroundColor : borderColor,
-                      height: index % 3 === 0 ? 8 : 4,
+                      height: index % 3 === 0 ? 10 : 5,
                     }
                   ]} 
                 />
               </View>
             ))}
             
-            {/* Center indicator */}
+            {/* Center dot */}
             <View style={[styles.centerDot, { backgroundColor: foregroundColor }]} />
           </View>
         </Animated.View>
-      </GestureDetector>
+      </View>
 
       {/* Hint */}
       <Text style={[styles.hint, { color: mutedColor }]}>
-        scroll up or down
+        drag up or down
       </Text>
+      
+      {/* Range indicator */}
+      <View style={styles.rangeRow}>
+        <Text style={[styles.rangeText, { color: mutedColor }]}>{MIN_WPM}</Text>
+        <View style={[styles.rangeLine, { backgroundColor: borderColor }]} />
+        <Text style={[styles.rangeText, { color: mutedColor }]}>{MAX_WPM}</Text>
+      </View>
     </View>
   );
 }
@@ -139,49 +149,63 @@ export function HapticDial({
 const styles = StyleSheet.create({
   container: {
     alignItems: 'center',
-    paddingVertical: 24,
+    paddingVertical: 20,
   },
   value: {
-    fontSize: 48,
+    fontSize: 56,
     fontWeight: '200',
-    letterSpacing: -2,
+    letterSpacing: -3,
   },
   unit: {
     fontSize: 13,
     fontWeight: '300',
-    marginTop: 2,
-    marginBottom: 24,
+    marginTop: 0,
+    marginBottom: 20,
   },
-  dialContainer: {
-    width: 120,
-    height: 120,
+  dialWrapper: {
+    width: 140,
+    height: 140,
   },
   dial: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    borderWidth: StyleSheet.hairlineWidth,
+    width: 140,
+    height: 140,
+    borderRadius: 70,
+    borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
   tickWrapper: {
     position: 'absolute',
-    width: 120,
-    height: 120,
+    width: 140,
+    height: 140,
     alignItems: 'center',
   },
   tick: {
     width: 1,
-    marginTop: 6,
+    marginTop: 8,
   },
   centerDot: {
-    width: 4,
-    height: 4,
-    borderRadius: 2,
+    width: 6,
+    height: 6,
+    borderRadius: 3,
   },
   hint: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '300',
     marginTop: 16,
+  },
+  rangeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 12,
+    gap: 8,
+  },
+  rangeText: {
+    fontSize: 11,
+    fontWeight: '300',
+  },
+  rangeLine: {
+    width: 60,
+    height: 1,
   },
 });

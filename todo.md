@@ -47,4 +47,6 @@
 - [x] Redesign speed control with Apple-style minimal UI
 - [x] Update GitHub with fixes
 - [x] Add minimal haptic dial with vertical scroll control
-- [ ] Update GitHub with haptic dial
+- [x] Update GitHub with haptic dial
+- [x] Fix haptic dial functionality - rewrite with reliable gesture handling
+- [ ] Update GitHub with fixed dial
