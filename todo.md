@@ -39,4 +39,7 @@
 - [x] Fix dark mode text visibility (text blending with background)
 - [x] Add reading mode toggle within reader screens (RSVP <-> Normal)
 - [x] Implement haptic dial animation for WPM speed control
-- [ ] Update GitHub with fixes
+- [x] Update GitHub with fixes
+- [x] Fix haptic dial animation not working
+- [x] Redesign haptic dial as compact side panel
+- [ ] Update GitHub with dial fixes

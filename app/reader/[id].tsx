@@ -13,7 +13,7 @@ import { ScreenContainer } from '@/components/screen-container';
 import { useColors } from '@/hooks/use-colors';
 import { useLibrary } from '@/lib/library-context';
 import { useKeepAwake } from 'expo-keep-awake';
-import { HapticDial } from '@/components/haptic-dial';
+import { SpeedSlider } from '@/components/speed-slider';
 import * as Haptics from 'expo-haptics';
 import { Platform } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
@@ -45,7 +45,7 @@ export default function ReaderScreen() {
   const [wpm, setWpm] = useState(settings.wordsPerMinute);
   const [showNavigator, setShowNavigator] = useState(false);
   const [showChapters, setShowChapters] = useState(false);
-  const [showSpeedDial, setShowSpeedDial] = useState(false);
+  const [showSpeedSlider, setShowSpeedSlider] = useState(false);
   
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const wordsReadRef = useRef(0);
@@ -106,7 +106,7 @@ export default function ReaderScreen() {
     }
     setIsPlaying(true);
     setShowNavigator(false);
-    setShowSpeedDial(false);
+    setShowSpeedSlider(false);
     if (Platform.OS !== 'web') {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
@@ -221,14 +221,14 @@ export default function ReaderScreen() {
       pause();
     }
     setShowNavigator(prev => !prev);
-    setShowSpeedDial(false);
+    setShowSpeedSlider(false);
   }, [isPlaying, pause]);
 
-  const toggleSpeedDial = useCallback(() => {
+  const toggleSpeedSlider = useCallback(() => {
     if (isPlaying) {
       pause();
     }
-    setShowSpeedDial(prev => !prev);
+    setShowSpeedSlider(prev => !prev);
     setShowNavigator(false);
   }, [isPlaying, pause]);
 
@@ -236,9 +236,9 @@ export default function ReaderScreen() {
   const tapGesture = Gesture.Tap()
     .runOnJS(true)
     .onEnd(() => {
-      if (showNavigator || showSpeedDial) {
+      if (showNavigator || showSpeedSlider) {
         setShowNavigator(false);
-        setShowSpeedDial(false);
+        setShowSpeedSlider(false);
       } else {
         togglePlayPause();
       }
@@ -308,11 +308,11 @@ export default function ReaderScreen() {
               <Text style={[styles.modeButtonText, { color: colors.muted }]}>Normal</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              onPress={toggleSpeedDial}
+              onPress={toggleSpeedSlider}
               style={styles.wpmButton}
               activeOpacity={0.6}
             >
-              <Text style={[styles.wpmDisplay, { color: showSpeedDial ? colors.foreground : colors.muted }]}>
+              <Text style={[styles.wpmDisplay, { color: showSpeedSlider ? colors.foreground : colors.muted }]}>
                 {wpm} wpm
               </Text>
             </TouchableOpacity>
@@ -346,17 +346,16 @@ export default function ReaderScreen() {
           </View>
         </GestureDetector>
 
-        {/* Speed Dial Panel */}
-        {showSpeedDial && (
-          <View style={[styles.speedDialPanel, { backgroundColor: colors.background, borderTopColor: colors.border }]}>
-            <HapticDial
-              value={wpm}
-              onChange={setWpm}
-              foregroundColor={colors.foreground}
-              mutedColor={colors.muted}
-              borderColor={colors.border}
-            />
-          </View>
+        {/* Speed Slider - Side Panel */}
+        {showSpeedSlider && (
+          <SpeedSlider
+            value={wpm}
+            onChange={setWpm}
+            foregroundColor={colors.foreground}
+            mutedColor={colors.muted}
+            borderColor={colors.border}
+            backgroundColor={colors.background}
+          />
         )}
 
         {/* Navigation Panel */}
@@ -617,11 +616,6 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '300',
     letterSpacing: 0.5,
-  },
-  speedDialPanel: {
-    paddingHorizontal: 24,
-    paddingVertical: 20,
-    borderTopWidth: 1,
   },
   navigatorPanel: {
     paddingHorizontal: 24,
