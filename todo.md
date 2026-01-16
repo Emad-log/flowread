@@ -45,4 +45,6 @@
 - [x] Update GitHub with dial fixes
 - [x] Fix speed slider crash
 - [x] Redesign speed control with Apple-style minimal UI
-- [ ] Update GitHub with fixes
+- [x] Update GitHub with fixes
+- [x] Add minimal haptic dial with vertical scroll control
+- [ ] Update GitHub with haptic dial

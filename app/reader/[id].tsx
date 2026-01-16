@@ -13,12 +13,12 @@ import { ScreenContainer } from '@/components/screen-container';
 import { useColors } from '@/hooks/use-colors';
 import { useLibrary } from '@/lib/library-context';
 import { useKeepAwake } from 'expo-keep-awake';
+import { HapticDial } from '@/components/haptic-dial';
 import * as Haptics from 'expo-haptics';
 import { Platform } from 'react-native';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const WORDS_PER_PAGE = 250;
-const SPEED_OPTIONS = [150, 200, 250, 300, 400, 500, 600];
 
 interface Chapter {
   title: string;
@@ -44,7 +44,7 @@ export default function ReaderScreen() {
   const [wpm, setWpm] = useState(settings.wordsPerMinute);
   const [showNavigator, setShowNavigator] = useState(false);
   const [showChapters, setShowChapters] = useState(false);
-  const [showSpeedPicker, setShowSpeedPicker] = useState(false);
+  const [showSpeedDial, setShowSpeedDial] = useState(false);
   
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const wordsReadRef = useRef(0);
@@ -111,7 +111,7 @@ export default function ReaderScreen() {
     }
     setIsPlaying(true);
     setShowNavigator(false);
-    setShowSpeedPicker(false);
+    setShowSpeedDial(false);
     triggerHaptic();
   }, [currentIndex, words.length, triggerHaptic]);
 
@@ -197,12 +197,6 @@ export default function ReaderScreen() {
     router.replace(`/normal-reader/${params.id}`);
   };
 
-  const handleSpeedSelect = useCallback((speed: number) => {
-    setWpm(speed);
-    setShowSpeedPicker(false);
-    triggerHaptic();
-  }, [triggerHaptic]);
-
   const jumpToPosition = useCallback((index: number) => {
     const clampedIndex = Math.max(0, Math.min(words.length - 1, index));
     setCurrentIndex(clampedIndex);
@@ -224,14 +218,14 @@ export default function ReaderScreen() {
       pause();
     }
     setShowNavigator(prev => !prev);
-    setShowSpeedPicker(false);
+    setShowSpeedDial(false);
   }, [isPlaying, pause]);
 
-  const toggleSpeedPicker = useCallback(() => {
+  const toggleSpeedDial = useCallback(() => {
     if (isPlaying) {
       pause();
     }
-    setShowSpeedPicker(prev => !prev);
+    setShowSpeedDial(prev => !prev);
     setShowNavigator(false);
   }, [isPlaying, pause]);
 
@@ -298,38 +292,15 @@ export default function ReaderScreen() {
               <Text style={[styles.headerLink, { color: colors.muted }]}>Normal</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              onPress={toggleSpeedPicker}
+              onPress={toggleSpeedDial}
               activeOpacity={0.5}
             >
-              <Text style={[styles.headerLink, { color: showSpeedPicker ? colors.foreground : colors.muted }]}>
+              <Text style={[styles.headerLink, { color: showSpeedDial ? colors.foreground : colors.muted }]}>
                 {wpm}
               </Text>
             </TouchableOpacity>
           </View>
         </View>
-
-        {/* Speed Picker - Apple style inline */}
-        {showSpeedPicker && (
-          <View style={styles.speedPickerContainer}>
-            <View style={[styles.speedPicker, { borderColor: colors.border }]}>
-              {SPEED_OPTIONS.map((speed) => (
-                <TouchableOpacity
-                  key={speed}
-                  onPress={() => handleSpeedSelect(speed)}
-                  style={styles.speedOption}
-                  activeOpacity={0.5}
-                >
-                  <Text style={[
-                    styles.speedOptionText, 
-                    { color: speed === wpm ? colors.foreground : colors.muted }
-                  ]}>
-                    {speed}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </View>
-        )}
 
         {/* Main reading area */}
         <TouchableOpacity 
@@ -359,6 +330,40 @@ export default function ReaderScreen() {
             </Text>
           </TouchableOpacity>
         </TouchableOpacity>
+
+        {/* Speed Dial Modal */}
+        <Modal
+          visible={showSpeedDial}
+          animationType="fade"
+          transparent={true}
+          onRequestClose={() => setShowSpeedDial(false)}
+        >
+          <TouchableOpacity 
+            style={styles.dialOverlay}
+            activeOpacity={1}
+            onPress={() => setShowSpeedDial(false)}
+          >
+            <View 
+              style={[styles.dialModal, { backgroundColor: colors.background }]}
+              onStartShouldSetResponder={() => true}
+            >
+              <HapticDial
+                value={wpm}
+                onChange={setWpm}
+                foregroundColor={colors.foreground}
+                mutedColor={colors.muted}
+                borderColor={colors.border}
+              />
+              <TouchableOpacity
+                onPress={() => setShowSpeedDial(false)}
+                style={styles.dialDone}
+                activeOpacity={0.5}
+              >
+                <Text style={[styles.dialDoneText, { color: colors.muted }]}>Done</Text>
+              </TouchableOpacity>
+            </View>
+          </TouchableOpacity>
+        </Modal>
 
         {/* Navigation Panel */}
         {showNavigator && (
@@ -546,24 +551,6 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '400',
   },
-  speedPickerContainer: {
-    paddingHorizontal: 20,
-    paddingBottom: 8,
-  },
-  speedPicker: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingVertical: 8,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-  },
-  speedOption: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-  },
-  speedOptionText: {
-    fontSize: 14,
-    fontWeight: '400',
-  },
   readerArea: {
     flex: 1,
     alignItems: 'center',
@@ -602,6 +589,27 @@ const styles = StyleSheet.create({
   positionText: {
     fontSize: 11,
     fontWeight: '300',
+  },
+  dialOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dialModal: {
+    borderRadius: 16,
+    paddingHorizontal: 32,
+    paddingTop: 24,
+    paddingBottom: 16,
+    minWidth: 200,
+  },
+  dialDone: {
+    alignItems: 'center',
+    paddingVertical: 12,
+  },
+  dialDoneText: {
+    fontSize: 15,
+    fontWeight: '400',
   },
   navigatorPanel: {
     paddingHorizontal: 20,
