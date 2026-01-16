@@ -2,12 +2,14 @@ import { Text, View, TouchableOpacity, StyleSheet, ScrollView } from 'react-nati
 import { ScreenContainer } from '@/components/screen-container';
 import { useColors } from '@/hooks/use-colors';
 import { useLibrary } from '@/lib/library-context';
+import { useThemeContext } from '@/lib/theme-provider';
 import * as Haptics from 'expo-haptics';
 import { Platform } from 'react-native';
 
 export default function SettingsScreen() {
   const colors = useColors();
   const { settings, stats, updateSettings } = useLibrary();
+  const { colorScheme, setColorScheme } = useThemeContext();
 
   const handleSpeedChange = (delta: number) => {
     if (Platform.OS !== 'web') {
@@ -15,6 +17,21 @@ export default function SettingsScreen() {
     }
     const newSpeed = Math.max(100, Math.min(800, settings.wordsPerMinute + delta));
     updateSettings({ wordsPerMinute: newSpeed });
+  };
+
+  const handleThemeChange = (theme: 'light' | 'dark') => {
+    if (Platform.OS !== 'web') {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+    setColorScheme(theme);
+    updateSettings({ theme });
+  };
+
+  const handleReadingModeChange = (mode: 'rsvp' | 'normal') => {
+    if (Platform.OS !== 'web') {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+    updateSettings({ readingMode: mode });
   };
 
   const formatTime = (seconds: number): string => {
@@ -35,10 +52,98 @@ export default function SettingsScreen() {
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
       >
+        {/* Theme */}
+        <View style={styles.section}>
+          <Text style={[styles.sectionLabel, { color: colors.muted }]}>
+            Appearance
+          </Text>
+          <View style={styles.toggleRow}>
+            <TouchableOpacity
+              onPress={() => handleThemeChange('light')}
+              style={[
+                styles.toggleButton,
+                { borderColor: colors.border },
+                colorScheme === 'light' && { borderColor: colors.foreground, backgroundColor: colors.surface }
+              ]}
+              activeOpacity={0.6}
+            >
+              <Text style={[
+                styles.toggleText, 
+                { color: colorScheme === 'light' ? colors.foreground : colors.muted }
+              ]}>
+                Light
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => handleThemeChange('dark')}
+              style={[
+                styles.toggleButton,
+                { borderColor: colors.border },
+                colorScheme === 'dark' && { borderColor: colors.foreground, backgroundColor: colors.surface }
+              ]}
+              activeOpacity={0.6}
+            >
+              <Text style={[
+                styles.toggleText, 
+                { color: colorScheme === 'dark' ? colors.foreground : colors.muted }
+              ]}>
+                Dark
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* Default Reading Mode */}
+        <View style={styles.section}>
+          <Text style={[styles.sectionLabel, { color: colors.muted }]}>
+            Default Reading Mode
+          </Text>
+          <View style={styles.toggleRow}>
+            <TouchableOpacity
+              onPress={() => handleReadingModeChange('rsvp')}
+              style={[
+                styles.toggleButton,
+                { borderColor: colors.border },
+                settings.readingMode === 'rsvp' && { borderColor: colors.foreground, backgroundColor: colors.surface }
+              ]}
+              activeOpacity={0.6}
+            >
+              <Text style={[
+                styles.toggleText, 
+                { color: settings.readingMode === 'rsvp' ? colors.foreground : colors.muted }
+              ]}>
+                RSVP
+              </Text>
+              <Text style={[styles.toggleSubtext, { color: colors.muted }]}>
+                Speed Read
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => handleReadingModeChange('normal')}
+              style={[
+                styles.toggleButton,
+                { borderColor: colors.border },
+                settings.readingMode === 'normal' && { borderColor: colors.foreground, backgroundColor: colors.surface }
+              ]}
+              activeOpacity={0.6}
+            >
+              <Text style={[
+                styles.toggleText, 
+                { color: settings.readingMode === 'normal' ? colors.foreground : colors.muted }
+              ]}>
+                Normal
+              </Text>
+              <Text style={[styles.toggleSubtext, { color: colors.muted }]}>
+                Scroll Read
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
         {/* Reading Speed */}
         <View style={styles.section}>
           <Text style={[styles.sectionLabel, { color: colors.muted }]}>
-            Reading Speed
+            RSVP Speed
           </Text>
           <View style={styles.speedControl}>
             <TouchableOpacity
@@ -86,7 +191,7 @@ export default function SettingsScreen() {
                 {stats.booksCompleted}
               </Text>
               <Text style={[styles.statLabel, { color: colors.muted }]}>
-                Books Completed
+                Completed
               </Text>
             </View>
             <View style={[styles.statDivider, { backgroundColor: colors.border }]} />
@@ -95,7 +200,7 @@ export default function SettingsScreen() {
                 {formatTime(stats.totalReadingTime)}
               </Text>
               <Text style={[styles.statLabel, { color: colors.muted }]}>
-                Time Reading
+                Time
               </Text>
             </View>
           </View>
@@ -107,7 +212,7 @@ export default function SettingsScreen() {
             About
           </Text>
           <Text style={[styles.aboutText, { color: colors.foreground }]}>
-            FlowRead uses RSVP technology to help you read faster by displaying words one at a time at your chosen speed.
+            FlowRead helps you read faster using RSVP technology, or enjoy books at your own pace with normal scrolling.
           </Text>
           <Text style={[styles.version, { color: colors.muted }]}>
             Version 1.0.0
@@ -134,7 +239,7 @@ const styles = StyleSheet.create({
     paddingBottom: 100,
   },
   section: {
-    marginBottom: 40,
+    marginBottom: 32,
   },
   sectionLabel: {
     fontSize: 12,
@@ -142,6 +247,27 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 1,
     marginBottom: 16,
+  },
+  toggleRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  toggleButton: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  toggleText: {
+    fontSize: 15,
+    fontWeight: '400',
+  },
+  toggleSubtext: {
+    fontSize: 11,
+    fontWeight: '300',
+    marginTop: 2,
   },
   speedControl: {
     flexDirection: 'row',

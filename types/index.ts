@@ -37,6 +37,7 @@ export interface ReadingSettings {
   wordsPerMinute: number;
   fontSize: 'small' | 'medium' | 'large';
   theme: 'system' | 'light' | 'dark';
+  readingMode: 'rsvp' | 'normal';
 }
 
 export interface ReadingStats {
@@ -49,6 +50,7 @@ export const DEFAULT_SETTINGS: ReadingSettings = {
   wordsPerMinute: 300,
   fontSize: 'medium',
   theme: 'system',
+  readingMode: 'rsvp',
 };
 
 export const DEFAULT_STATS: ReadingStats = {

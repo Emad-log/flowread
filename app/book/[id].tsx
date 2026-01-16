@@ -32,7 +32,7 @@ export default function BookDetailScreen() {
   const [isAdding, setIsAdding] = useState(false);
   const colors = useColors();
   const router = useRouter();
-  const { books, addBook, updateBookContent } = useLibrary();
+  const { books, settings, addBook, updateBookContent } = useLibrary();
 
   const isInLibrary = books.some(b => b.id === params.id);
   const existingBook = books.find(b => b.id === params.id);
@@ -72,11 +72,15 @@ export default function BookDetailScreen() {
     }
   };
 
-  const handleStartReading = () => {
+  const handleStartReading = (mode: 'rsvp' | 'normal') => {
     if (Platform.OS !== 'web') {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
-    router.push(`/reader/${params.id}`);
+    if (mode === 'normal') {
+      router.push(`/normal-reader/${params.id}`);
+    } else {
+      router.push(`/reader/${params.id}`);
+    }
   };
 
   const handleBack = () => {
@@ -142,28 +146,46 @@ export default function BookDetailScreen() {
           </View>
         </ScrollView>
 
-        {/* Action Button */}
-        <View style={[styles.actions, { borderTopColor: colors.border }]}>
+        {/* Action Buttons */}
+        <View style={[styles.actions, { borderTopColor: colors.border, backgroundColor: colors.background }]}>
           {isInLibrary ? (
-            <TouchableOpacity
-              onPress={handleStartReading}
-              style={[styles.primaryButton, { borderColor: colors.foreground }]}
-              activeOpacity={0.6}
-              disabled={!existingBook?.content}
-            >
-              {existingBook?.content ? (
-                <Text style={[styles.primaryButtonText, { color: colors.foreground }]}>
-                  {existingBook.currentPosition ? 'Continue' : 'Read'}
-                </Text>
-              ) : (
+            existingBook?.content ? (
+              <View style={styles.readingOptions}>
+                <TouchableOpacity
+                  onPress={() => handleStartReading('rsvp')}
+                  style={[styles.readButton, { borderColor: colors.foreground }]}
+                  activeOpacity={0.6}
+                >
+                  <Text style={[styles.readButtonText, { color: colors.foreground }]}>
+                    RSVP
+                  </Text>
+                  <Text style={[styles.readButtonSubtext, { color: colors.muted }]}>
+                    Speed Read
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => handleStartReading('normal')}
+                  style={[styles.readButton, { borderColor: colors.foreground }]}
+                  activeOpacity={0.6}
+                >
+                  <Text style={[styles.readButtonText, { color: colors.foreground }]}>
+                    Normal
+                  </Text>
+                  <Text style={[styles.readButtonSubtext, { color: colors.muted }]}>
+                    Scroll Read
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <View style={[styles.primaryButton, { borderColor: colors.border }]}>
                 <View style={styles.loadingRow}>
                   <ActivityIndicator size="small" color={colors.muted} />
                   <Text style={[styles.primaryButtonText, { color: colors.muted }]}>
-                    Loading...
+                    Loading book...
                   </Text>
                 </View>
-              )}
-            </TouchableOpacity>
+              </View>
+            )
           ) : (
             <TouchableOpacity
               onPress={handleAddToLibrary}
@@ -207,7 +229,7 @@ const styles = StyleSheet.create({
     fontWeight: '300',
   },
   content: {
-    paddingBottom: 120,
+    paddingBottom: 140,
   },
   coverContainer: {
     alignItems: 'center',
@@ -261,6 +283,28 @@ const styles = StyleSheet.create({
     paddingTop: 16,
     paddingBottom: 32,
     borderTopWidth: 1,
+  },
+  readingOptions: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  readButton: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  readButtonText: {
+    fontSize: 15,
+    fontWeight: '400',
+    letterSpacing: -0.2,
+  },
+  readButtonSubtext: {
+    fontSize: 11,
+    fontWeight: '300',
+    marginTop: 2,
   },
   primaryButton: {
     alignItems: 'center',

@@ -32,3 +32,7 @@
 - [x] Add progress scrubber/slider to navigate within book
 - [x] Add chapter/section selector modal
 - [x] Show current position indicator (word X of Y)
+- [x] Add normal reading mode (scrollable text view)
+- [x] Add reading mode toggle (RSVP vs Normal)
+- [x] Add light/dark theme toggle in settings
+- [ ] Update GitHub repository with new features
