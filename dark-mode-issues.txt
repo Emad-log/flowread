@@ -1,0 +1,11 @@
+Dark mode issues found in Settings screen:
+1. Statistics numbers (0, 0, 0s) are not visible - text is dark on dark background
+2. WPM number (300) is not visible - text is dark on dark background  
+3. About section text is not visible
+4. The +/- buttons show as empty circles (text not visible)
+5. "Settings" title at top is not visible
+
+The issue is that the colors.foreground is not being properly applied in dark mode.
+The theme config shows foreground dark should be #FFFFFF but it's showing as black.
+
+This is likely because the useColors hook is not getting the updated colorScheme from the context.

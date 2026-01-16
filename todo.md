@@ -54,4 +54,7 @@
 - [x] Set light mode as default appearance
 - [x] Update GitHub with changes
 - [x] Fix ruler picker scrolling not working
-- [ ] Update GitHub with fix
+- [x] Update GitHub with fix
+- [x] Ensure web version has same aesthetic and functionality
+- [x] Test web version across all screens
+- [x] Prepare for publishing
