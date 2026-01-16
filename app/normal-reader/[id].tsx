@@ -96,6 +96,16 @@ export default function NormalReaderScreen() {
     router.back();
   };
 
+  const handleSwitchToRSVP = () => {
+    if (Platform.OS !== 'web') {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    }
+    if (book) {
+      updateBookProgress(book.id, estimatedWordPosition);
+    }
+    router.replace(`/reader/${params.id}`);
+  };
+
   if (!book || !book.content) {
     return (
       <>
@@ -125,9 +135,19 @@ export default function NormalReaderScreen() {
           >
             <Text style={[styles.backText, { color: colors.foreground }]}>←</Text>
           </TouchableOpacity>
-          <Text style={[styles.pageInfo, { color: colors.muted }]}>
-            {currentPage} / {totalPages}
-          </Text>
+          
+          <View style={styles.headerRight}>
+            <TouchableOpacity
+              onPress={handleSwitchToRSVP}
+              style={[styles.modeButton, { borderColor: colors.border }]}
+              activeOpacity={0.6}
+            >
+              <Text style={[styles.modeButtonText, { color: colors.muted }]}>RSVP</Text>
+            </TouchableOpacity>
+            <Text style={[styles.pageInfo, { color: colors.muted }]}>
+              {currentPage} / {totalPages}
+            </Text>
+          </View>
         </View>
 
         {/* Content */}
@@ -174,8 +194,11 @@ export default function NormalReaderScreen() {
             <Text style={[styles.progressText, { color: colors.muted }]}>
               {Math.round(Math.min(100, Math.max(0, progress)))}%
             </Text>
-            <Text style={[styles.modeText, { color: colors.muted }]}>
-              Normal Mode
+            <Text style={[styles.modeLabel, { color: colors.muted }]}>
+              NORMAL
+            </Text>
+            <Text style={[styles.bookTitle, { color: colors.muted }]} numberOfLines={1}>
+              {book.title}
             </Text>
           </View>
         </View>
@@ -201,6 +224,21 @@ const styles = StyleSheet.create({
   backText: {
     fontSize: 24,
     fontWeight: '300',
+  },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  modeButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  modeButtonText: {
+    fontSize: 12,
+    fontWeight: '400',
   },
   pageInfo: {
     fontSize: 13,
@@ -249,9 +287,18 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '300',
   },
-  modeText: {
+  modeLabel: {
+    fontSize: 10,
+    fontWeight: '400',
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+  },
+  bookTitle: {
     fontSize: 12,
     fontWeight: '300',
+    flex: 1,
+    textAlign: 'right',
+    marginLeft: 16,
   },
   loadingText: {
     fontSize: 14,

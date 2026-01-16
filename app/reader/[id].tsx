@@ -7,25 +7,19 @@ import {
   Dimensions,
   Modal,
   FlatList,
-  ScrollView,
 } from 'react-native';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { ScreenContainer } from '@/components/screen-container';
 import { useColors } from '@/hooks/use-colors';
 import { useLibrary } from '@/lib/library-context';
 import { useKeepAwake } from 'expo-keep-awake';
+import { HapticDial } from '@/components/haptic-dial';
 import * as Haptics from 'expo-haptics';
 import { Platform } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import Animated, { 
-  useSharedValue, 
-  useAnimatedStyle, 
-  withTiming,
-  runOnJS,
-} from 'react-native-reanimated';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const WORDS_PER_PAGE = 250; // Approximate words per "page"
+const WORDS_PER_PAGE = 250;
 
 interface Chapter {
   title: string;
@@ -51,21 +45,20 @@ export default function ReaderScreen() {
   const [wpm, setWpm] = useState(settings.wordsPerMinute);
   const [showNavigator, setShowNavigator] = useState(false);
   const [showChapters, setShowChapters] = useState(false);
+  const [showSpeedDial, setShowSpeedDial] = useState(false);
   
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const wordsReadRef = useRef(0);
-  const sliderWidth = useSharedValue(0);
 
   // Calculate total pages
   const totalPages = Math.ceil(words.length / WORDS_PER_PAGE);
   const currentPage = Math.floor(currentIndex / WORDS_PER_PAGE) + 1;
 
-  // Detect chapters (look for common chapter markers)
+  // Detect chapters
   const chapters = useMemo(() => {
     const chapterList: Chapter[] = [{ title: 'Beginning', startIndex: 0 }];
     const content = book?.content || '';
     
-    // Common chapter patterns
     const chapterPatterns = [
       /\bCHAPTER\s+(\d+|[IVXLC]+)/gi,
       /\bPART\s+(\d+|[IVXLC]+)/gi,
@@ -95,7 +88,7 @@ export default function ReaderScreen() {
     return chapterList;
   }, [book?.content]);
 
-  // Calculate ORP (Optimal Recognition Point) index
+  // Calculate ORP index
   const getORPIndex = (word: string): number => {
     const len = word.length;
     if (len <= 1) return 0;
@@ -105,8 +98,6 @@ export default function ReaderScreen() {
 
   const currentWord = words[currentIndex] || '';
   const orpIndex = getORPIndex(currentWord);
-
-  // Progress percentage
   const progress = words.length > 0 ? (currentIndex / words.length) * 100 : 0;
 
   const play = useCallback(() => {
@@ -115,6 +106,7 @@ export default function ReaderScreen() {
     }
     setIsPlaying(true);
     setShowNavigator(false);
+    setShowSpeedDial(false);
     if (Platform.OS !== 'web') {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
@@ -196,12 +188,15 @@ export default function ReaderScreen() {
     router.back();
   };
 
-  const adjustSpeed = useCallback((delta: number) => {
-    setWpm(prev => Math.max(100, Math.min(800, prev + delta)));
+  const handleSwitchToNormal = () => {
     if (Platform.OS !== 'web') {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     }
-  }, []);
+    if (book) {
+      updateBookProgress(book.id, currentIndex);
+    }
+    router.replace(`/normal-reader/${params.id}`);
+  };
 
   const jumpToPosition = useCallback((index: number) => {
     const clampedIndex = Math.max(0, Math.min(words.length - 1, index));
@@ -226,37 +221,33 @@ export default function ReaderScreen() {
       pause();
     }
     setShowNavigator(prev => !prev);
+    setShowSpeedDial(false);
+  }, [isPlaying, pause]);
+
+  const toggleSpeedDial = useCallback(() => {
+    if (isPlaying) {
+      pause();
+    }
+    setShowSpeedDial(prev => !prev);
+    setShowNavigator(false);
   }, [isPlaying, pause]);
 
   // Gesture handlers
   const tapGesture = Gesture.Tap()
     .runOnJS(true)
     .onEnd(() => {
-      if (showNavigator) {
+      if (showNavigator || showSpeedDial) {
         setShowNavigator(false);
+        setShowSpeedDial(false);
       } else {
         togglePlayPause();
       }
     });
 
-  const panGesture = Gesture.Pan()
-    .runOnJS(true)
-    .onEnd((event) => {
-      if (Math.abs(event.translationX) > 50) {
-        if (event.translationX > 0) {
-          adjustSpeed(-50);
-        } else {
-          adjustSpeed(50);
-        }
-      }
-    });
-
-  const composedGesture = Gesture.Race(tapGesture, panGesture);
-
   // Handle slider drag
   const handleSliderPress = (event: any) => {
     const { locationX } = event.nativeEvent;
-    const sliderTrackWidth = SCREEN_WIDTH - 48; // Account for padding
+    const sliderTrackWidth = SCREEN_WIDTH - 48;
     const percentage = Math.max(0, Math.min(1, locationX / sliderTrackWidth));
     const newIndex = Math.floor(percentage * (words.length - 1));
     jumpToPosition(newIndex);
@@ -307,19 +298,29 @@ export default function ReaderScreen() {
           >
             <Text style={[styles.backText, { color: colors.foreground }]}>←</Text>
           </TouchableOpacity>
-          <TouchableOpacity
-            onPress={() => setShowChapters(true)}
-            style={styles.chaptersButton}
-            activeOpacity={0.6}
-          >
-            <Text style={[styles.wpmDisplay, { color: colors.muted }]}>
-              {wpm} wpm
-            </Text>
-          </TouchableOpacity>
+          
+          <View style={styles.headerRight}>
+            <TouchableOpacity
+              onPress={handleSwitchToNormal}
+              style={[styles.modeButton, { borderColor: colors.border }]}
+              activeOpacity={0.6}
+            >
+              <Text style={[styles.modeButtonText, { color: colors.muted }]}>Normal</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={toggleSpeedDial}
+              style={styles.wpmButton}
+              activeOpacity={0.6}
+            >
+              <Text style={[styles.wpmDisplay, { color: showSpeedDial ? colors.foreground : colors.muted }]}>
+                {wpm} wpm
+              </Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* Main reading area */}
-        <GestureDetector gesture={composedGesture}>
+        <GestureDetector gesture={tapGesture}>
           <View style={styles.readerArea}>
             {/* ORP guide line */}
             <View style={[styles.orpLine, { backgroundColor: colors.border }]} />
@@ -344,6 +345,19 @@ export default function ReaderScreen() {
             </TouchableOpacity>
           </View>
         </GestureDetector>
+
+        {/* Speed Dial Panel */}
+        {showSpeedDial && (
+          <View style={[styles.speedDialPanel, { backgroundColor: colors.background, borderTopColor: colors.border }]}>
+            <HapticDial
+              value={wpm}
+              onChange={setWpm}
+              foregroundColor={colors.foreground}
+              mutedColor={colors.muted}
+              borderColor={colors.border}
+            />
+          </View>
+        )}
 
         {/* Navigation Panel */}
         {showNavigator && (
@@ -430,7 +444,6 @@ export default function ReaderScreen() {
 
         {/* Footer */}
         <View style={styles.footer}>
-          {/* Progress bar */}
           <TouchableOpacity 
             onPress={toggleNavigator}
             activeOpacity={0.8}
@@ -448,6 +461,9 @@ export default function ReaderScreen() {
           <View style={styles.footerInfo}>
             <Text style={[styles.progressText, { color: colors.muted }]}>
               {Math.round(progress)}%
+            </Text>
+            <Text style={[styles.modeLabel, { color: colors.muted }]}>
+              RSVP
             </Text>
             <Text style={[styles.bookTitle, { color: colors.muted }]} numberOfLines={1}>
               {book.title}
@@ -537,7 +553,22 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: '300',
   },
-  chaptersButton: {
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  modeButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  modeButtonText: {
+    fontSize: 12,
+    fontWeight: '400',
+  },
+  wpmButton: {
     paddingHorizontal: 12,
     paddingVertical: 8,
   },
@@ -586,6 +617,11 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '300',
     letterSpacing: 0.5,
+  },
+  speedDialPanel: {
+    paddingHorizontal: 24,
+    paddingVertical: 20,
+    borderTopWidth: 1,
   },
   navigatorPanel: {
     paddingHorizontal: 24,
@@ -691,6 +727,12 @@ const styles = StyleSheet.create({
   progressText: {
     fontSize: 12,
     fontWeight: '300',
+  },
+  modeLabel: {
+    fontSize: 10,
+    fontWeight: '400',
+    letterSpacing: 1,
+    textTransform: 'uppercase',
   },
   bookTitle: {
     fontSize: 12,

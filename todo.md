@@ -35,4 +35,8 @@
 - [x] Add normal reading mode (scrollable text view)
 - [x] Add reading mode toggle (RSVP vs Normal)
 - [x] Add light/dark theme toggle in settings
-- [ ] Update GitHub repository with new features
+- [x] Update GitHub repository with new features
+- [x] Fix dark mode text visibility (text blending with background)
+- [x] Add reading mode toggle within reader screens (RSVP <-> Normal)
+- [x] Implement haptic dial animation for WPM speed control
+- [ ] Update GitHub with fixes
