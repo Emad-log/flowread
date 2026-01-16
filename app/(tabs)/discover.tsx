@@ -1,31 +1,26 @@
 import { useState, useEffect, useCallback } from 'react';
 import { 
-  FlatList, 
   Text, 
   View, 
   TextInput, 
+  FlatList, 
   TouchableOpacity, 
-  StyleSheet, 
-  Dimensions,
+  StyleSheet,
   ActivityIndicator,
   Keyboard,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { Image } from 'expo-image';
 import { ScreenContainer } from '@/components/screen-container';
-import { BookCard } from '@/components/book-card';
 import { useColors } from '@/hooks/use-colors';
-import { IconSymbol } from '@/components/ui/icon-symbol';
-import { Book } from '@/types';
 import { searchBooks, getTrendingBooks } from '@/lib/open-library';
+import { Book } from '@/types';
 import * as Haptics from 'expo-haptics';
 import { Platform } from 'react-native';
 
-const { width } = Dimensions.get('window');
-const CARD_WIDTH = (width - 48 - 16) / 2;
-
 export default function DiscoverScreen() {
-  const [searchQuery, setSearchQuery] = useState('');
-  const [books, setBooks] = useState<Book[]>([]);
+  const [query, setQuery] = useState('');
+  const [results, setResults] = useState<Book[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
   const colors = useColors();
@@ -36,39 +31,45 @@ export default function DiscoverScreen() {
     const loadTrending = async () => {
       setIsLoading(true);
       const trending = await getTrendingBooks();
-      setBooks(trending);
+      setResults(trending);
       setIsLoading(false);
     };
     loadTrending();
   }, []);
 
   const handleSearch = useCallback(async () => {
-    if (!searchQuery.trim()) return;
+    if (!query.trim()) return;
     
     Keyboard.dismiss();
     setIsLoading(true);
     setHasSearched(true);
     
-    const results = await searchBooks(searchQuery.trim());
-    setBooks(results);
-    setIsLoading(false);
-  }, [searchQuery]);
+    try {
+      const searchResults = await searchBooks(query.trim());
+      setResults(searchResults);
+    } catch (error) {
+      console.error('Search failed:', error);
+      setResults([]);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [query]);
 
   const handleBookPress = (book: Book) => {
     if (Platform.OS !== 'web') {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
     router.push({
-      pathname: '/book/[id]' as const,
-      params: { 
+      pathname: '/book/[id]',
+      params: {
         id: book.id,
         title: book.title,
         author: book.author,
         coverUrl: book.coverUrl || '',
-        description: book.description,
+        description: book.description || '',
         pageCount: book.pageCount?.toString() || '',
         publishYear: book.publishYear?.toString() || '',
-        subjects: book.subjects.join(','),
+        subjects: book.subjects?.join(',') || '',
       },
     });
   };
@@ -76,75 +77,98 @@ export default function DiscoverScreen() {
   const renderBook = ({ item }: { item: Book }) => (
     <TouchableOpacity
       onPress={() => handleBookPress(item)}
-      style={[styles.cardWrapper, { width: CARD_WIDTH }]}
-      activeOpacity={0.7}
+      style={styles.bookItem}
+      activeOpacity={0.6}
     >
-      <BookCard book={item} />
+      <View style={styles.bookContent}>
+        {item.coverUrl ? (
+          <Image
+            source={{ uri: item.coverUrl }}
+            style={[styles.cover, { backgroundColor: colors.surface }]}
+            contentFit="cover"
+            transition={200}
+          />
+        ) : (
+          <View style={[styles.cover, { backgroundColor: colors.surface }]}>
+            <Text style={[styles.coverLetter, { color: colors.muted }]}>
+              {item.title.charAt(0)}
+            </Text>
+          </View>
+        )}
+        <View style={styles.bookInfo}>
+          <Text style={[styles.bookTitle, { color: colors.foreground }]} numberOfLines={2}>
+            {item.title}
+          </Text>
+          <Text style={[styles.bookAuthor, { color: colors.muted }]} numberOfLines={1}>
+            {item.author}
+          </Text>
+          {item.publishYear && (
+            <Text style={[styles.bookYear, { color: colors.muted }]}>
+              {item.publishYear}
+            </Text>
+          )}
+        </View>
+      </View>
     </TouchableOpacity>
   );
-
-  const renderEmptyState = () => {
-    if (isLoading) return null;
-    
-    return (
-      <View style={styles.emptyContainer}>
-        <IconSymbol name="magnifyingglass" size={48} color={colors.muted} />
-        <Text style={[styles.emptyText, { color: colors.muted }]}>
-          {hasSearched ? 'No books found' : 'Search for books to read'}
-        </Text>
-      </View>
-    );
-  };
 
   return (
     <ScreenContainer className="flex-1">
       <View style={styles.header}>
-        <Text style={[styles.headerTitle, { color: colors.foreground }]}>Discover</Text>
+        <Text style={[styles.title, { color: colors.foreground }]}>Discover</Text>
       </View>
 
       <View style={styles.searchContainer}>
-        <View style={[styles.searchBar, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-          <IconSymbol name="magnifyingglass" size={20} color={colors.muted} />
-          <TextInput
-            style={[styles.searchInput, { color: colors.foreground }]}
-            placeholder="Search books, authors..."
-            placeholderTextColor={colors.muted}
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            onSubmitEditing={handleSearch}
-            returnKeyType="search"
-            autoCapitalize="none"
-            autoCorrect={false}
-          />
-          {searchQuery.length > 0 && (
-            <TouchableOpacity onPress={() => setSearchQuery('')} activeOpacity={0.7}>
-              <IconSymbol name="xmark" size={18} color={colors.muted} />
-            </TouchableOpacity>
-          )}
-        </View>
+        <TextInput
+          style={[
+            styles.searchInput, 
+            { 
+              color: colors.foreground, 
+              borderColor: colors.border,
+              backgroundColor: colors.background,
+            }
+          ]}
+          placeholder="Search books..."
+          placeholderTextColor={colors.muted}
+          value={query}
+          onChangeText={setQuery}
+          onSubmitEditing={handleSearch}
+          returnKeyType="search"
+          autoCapitalize="none"
+          autoCorrect={false}
+        />
       </View>
 
-      {!hasSearched && books.length > 0 && (
-        <Text style={[styles.sectionTitle, { color: colors.muted }]}>
-          Popular Books
+      {!hasSearched && results.length > 0 && (
+        <Text style={[styles.sectionLabel, { color: colors.muted }]}>
+          Popular
         </Text>
       )}
 
       {isLoading ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={colors.primary} />
+        <View style={styles.centered}>
+          <ActivityIndicator size="small" color={colors.muted} />
         </View>
-      ) : books.length === 0 ? (
-        renderEmptyState()
+      ) : hasSearched && results.length === 0 ? (
+        <View style={styles.centered}>
+          <Text style={[styles.noResults, { color: colors.muted }]}>
+            No results found
+          </Text>
+        </View>
+      ) : results.length === 0 ? (
+        <View style={styles.centered}>
+          <Text style={[styles.hint, { color: colors.muted }]}>
+            Search for books to add to your library
+          </Text>
+        </View>
       ) : (
         <FlatList
-          data={books}
+          data={results}
           renderItem={renderBook}
           keyExtractor={(item) => item.id}
-          numColumns={2}
-          columnWrapperStyle={styles.row}
-          contentContainerStyle={styles.listContent}
+          contentContainerStyle={styles.list}
           showsVerticalScrollIndicator={false}
+          ItemSeparatorComponent={() => <View style={[styles.separator, { backgroundColor: colors.border }]} />}
         />
       )}
     </ScreenContainer>
@@ -154,67 +178,92 @@ export default function DiscoverScreen() {
 const styles = StyleSheet.create({
   header: {
     paddingHorizontal: 24,
-    paddingTop: 8,
-    paddingBottom: 8,
+    paddingTop: 16,
+    paddingBottom: 16,
   },
-  headerTitle: {
-    fontSize: 34,
-    fontWeight: '700',
-    letterSpacing: -0.5,
+  title: {
+    fontSize: 32,
+    fontWeight: '300',
+    letterSpacing: -1,
   },
   searchContainer: {
     paddingHorizontal: 24,
-    paddingVertical: 12,
-  },
-  searchBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 12,
-    borderWidth: 0.5,
-    gap: 12,
+    paddingBottom: 16,
   },
   searchInput: {
-    flex: 1,
-    fontSize: 16,
-    padding: 0,
-  },
-  sectionTitle: {
-    fontSize: 13,
-    fontWeight: '600',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    paddingHorizontal: 24,
-    marginBottom: 12,
-  },
-  listContent: {
-    paddingHorizontal: 24,
-    paddingBottom: 100,
-  },
-  row: {
-    gap: 16,
-    marginBottom: 16,
-  },
-  cardWrapper: {
-    flex: 1,
-    maxWidth: CARD_WIDTH,
-  },
-  emptyContainer: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingBottom: 100,
-    gap: 16,
-  },
-  emptyText: {
+    height: 44,
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 16,
     fontSize: 15,
-    textAlign: 'center',
+    fontWeight: '300',
   },
-  loadingContainer: {
+  sectionLabel: {
+    fontSize: 12,
+    fontWeight: '400',
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+    paddingHorizontal: 24,
+    marginBottom: 8,
+  },
+  list: {
+    paddingHorizontal: 24,
+    paddingBottom: 100,
+  },
+  bookItem: {
+    paddingVertical: 16,
+  },
+  bookContent: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
+  cover: {
+    width: 48,
+    height: 72,
+    borderRadius: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  coverLetter: {
+    fontSize: 20,
+    fontWeight: '300',
+  },
+  bookInfo: {
+    flex: 1,
+    marginLeft: 16,
+  },
+  bookTitle: {
+    fontSize: 16,
+    fontWeight: '400',
+    letterSpacing: -0.3,
+    lineHeight: 22,
+  },
+  bookAuthor: {
+    fontSize: 14,
+    fontWeight: '300',
+    marginTop: 4,
+  },
+  bookYear: {
+    fontSize: 12,
+    fontWeight: '300',
+    marginTop: 4,
+  },
+  separator: {
+    height: 1,
+  },
+  centered: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingBottom: 100,
+  },
+  noResults: {
+    fontSize: 14,
+    fontWeight: '300',
+  },
+  hint: {
+    fontSize: 14,
+    fontWeight: '300',
+    textAlign: 'center',
+    paddingHorizontal: 48,
   },
 });

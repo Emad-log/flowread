@@ -1,98 +1,138 @@
-import { FlatList, Text, View, TouchableOpacity, StyleSheet, Dimensions } from 'react-native';
+import { Text, View, FlatList, TouchableOpacity, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
+import { Image } from 'expo-image';
 import { ScreenContainer } from '@/components/screen-container';
-import { BookCard } from '@/components/book-card';
-import { useLibrary } from '@/lib/library-context';
 import { useColors } from '@/hooks/use-colors';
-import { IconSymbol } from '@/components/ui/icon-symbol';
+import { useLibrary } from '@/lib/library-context';
 import { Book } from '@/types';
 import * as Haptics from 'expo-haptics';
 import { Platform } from 'react-native';
 
-const { width } = Dimensions.get('window');
-const CARD_WIDTH = (width - 48 - 16) / 2; // 2 columns with padding and gap
-
 export default function LibraryScreen() {
-  const { books, isLoading } = useLibrary();
   const colors = useColors();
   const router = useRouter();
+  const { books, isLoading } = useLibrary();
 
   const handleBookPress = (book: Book) => {
     if (Platform.OS !== 'web') {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
-    router.push(`/reader/${book.id}`);
+    router.push({
+      pathname: '/book/[id]',
+      params: {
+        id: book.id,
+        title: book.title,
+        author: book.author,
+        coverUrl: book.coverUrl || '',
+        description: book.description || '',
+        pageCount: book.pageCount?.toString() || '',
+        publishYear: book.publishYear?.toString() || '',
+        subjects: book.subjects?.join(',') || '',
+      },
+    });
   };
 
-  const handleDiscoverPress = () => {
+  const handleDiscover = () => {
     if (Platform.OS !== 'web') {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
     router.push('/(tabs)/discover');
   };
 
-  const renderEmptyState = () => (
-    <View style={styles.emptyContainer}>
-      <View style={[styles.emptyIcon, { backgroundColor: colors.surface }]}>
-        <IconSymbol name="books.vertical.fill" size={48} color={colors.muted} />
-      </View>
-      <Text style={[styles.emptyTitle, { color: colors.foreground }]}>
-        Your Library is Empty
-      </Text>
-      <Text style={[styles.emptySubtitle, { color: colors.muted }]}>
-        Discover books to start building your personal reading collection
-      </Text>
+  const renderBook = ({ item }: { item: Book }) => {
+    const progress = item.currentPosition && item.totalWords 
+      ? Math.round((item.currentPosition / item.totalWords) * 100)
+      : 0;
+
+    return (
       <TouchableOpacity
-        onPress={handleDiscoverPress}
-        style={[styles.discoverButton, { backgroundColor: colors.primary }]}
-        activeOpacity={0.8}
+        onPress={() => handleBookPress(item)}
+        style={styles.bookItem}
+        activeOpacity={0.6}
       >
-        <Text style={[styles.discoverButtonText, { color: colors.background }]}>
-          Discover Books
-        </Text>
+        <View style={styles.bookContent}>
+          {item.coverUrl ? (
+            <Image
+              source={{ uri: item.coverUrl }}
+              style={[styles.cover, { backgroundColor: colors.surface }]}
+              contentFit="cover"
+              transition={200}
+            />
+          ) : (
+            <View style={[styles.cover, { backgroundColor: colors.surface }]}>
+              <Text style={[styles.coverLetter, { color: colors.muted }]}>
+                {item.title.charAt(0)}
+              </Text>
+            </View>
+          )}
+          <View style={styles.bookInfo}>
+            <Text style={[styles.bookTitle, { color: colors.foreground }]} numberOfLines={1}>
+              {item.title}
+            </Text>
+            <Text style={[styles.bookAuthor, { color: colors.muted }]} numberOfLines={1}>
+              {item.author}
+            </Text>
+            {progress > 0 && (
+              <View style={styles.progressContainer}>
+                <View style={[styles.progressBar, { backgroundColor: colors.border }]}>
+                  <View 
+                    style={[
+                      styles.progressFill, 
+                      { backgroundColor: colors.foreground, width: `${progress}%` }
+                    ]} 
+                  />
+                </View>
+                <Text style={[styles.progressText, { color: colors.muted }]}>
+                  {progress}%
+                </Text>
+              </View>
+            )}
+          </View>
+        </View>
       </TouchableOpacity>
-    </View>
-  );
+    );
+  };
 
-  const renderBook = ({ item }: { item: Book }) => (
-    <TouchableOpacity
-      onPress={() => handleBookPress(item)}
-      style={[styles.cardWrapper, { width: CARD_WIDTH }]}
-      activeOpacity={0.7}
-    >
-      <BookCard book={item} showProgress />
-    </TouchableOpacity>
-  );
-
-  // Sort books by most recently added
-  const sortedBooks = [...books].sort((a, b) => (b.addedAt || 0) - (a.addedAt || 0));
+  if (isLoading) {
+    return (
+      <ScreenContainer className="flex-1 items-center justify-center">
+        <Text style={[styles.loadingText, { color: colors.muted }]}>Loading...</Text>
+      </ScreenContainer>
+    );
+  }
 
   return (
     <ScreenContainer className="flex-1">
       <View style={styles.header}>
-        <Text style={[styles.headerTitle, { color: colors.foreground }]}>Library</Text>
-        {books.length > 0 && (
-          <Text style={[styles.bookCount, { color: colors.muted }]}>
-            {books.length} {books.length === 1 ? 'book' : 'books'}
-          </Text>
-        )}
+        <Text style={[styles.title, { color: colors.foreground }]}>Library</Text>
       </View>
 
-      {isLoading ? (
-        <View style={styles.loadingContainer}>
-          <Text style={[styles.loadingText, { color: colors.muted }]}>Loading...</Text>
+      {books.length === 0 ? (
+        <View style={styles.emptyState}>
+          <Text style={[styles.emptyTitle, { color: colors.foreground }]}>
+            No books yet
+          </Text>
+          <Text style={[styles.emptySubtitle, { color: colors.muted }]}>
+            Add books to start reading
+          </Text>
+          <TouchableOpacity
+            onPress={handleDiscover}
+            style={[styles.discoverButton, { borderColor: colors.foreground }]}
+            activeOpacity={0.6}
+          >
+            <Text style={[styles.discoverButtonText, { color: colors.foreground }]}>
+              Browse Books
+            </Text>
+          </TouchableOpacity>
         </View>
-      ) : books.length === 0 ? (
-        renderEmptyState()
       ) : (
         <FlatList
-          data={sortedBooks}
+          data={books.sort((a, b) => (b.addedAt || 0) - (a.addedAt || 0))}
           renderItem={renderBook}
           keyExtractor={(item) => item.id}
-          numColumns={2}
-          columnWrapperStyle={styles.row}
-          contentContainerStyle={styles.listContent}
+          contentContainerStyle={styles.list}
           showsVerticalScrollIndicator={false}
+          ItemSeparatorComponent={() => <View style={[styles.separator, { backgroundColor: colors.border }]} />}
         />
       )}
     </ScreenContainer>
@@ -102,72 +142,103 @@ export default function LibraryScreen() {
 const styles = StyleSheet.create({
   header: {
     paddingHorizontal: 24,
-    paddingTop: 8,
-    paddingBottom: 16,
+    paddingTop: 16,
+    paddingBottom: 24,
   },
-  headerTitle: {
-    fontSize: 34,
-    fontWeight: '700',
-    letterSpacing: -0.5,
+  title: {
+    fontSize: 32,
+    fontWeight: '300',
+    letterSpacing: -1,
   },
-  bookCount: {
-    fontSize: 15,
-    marginTop: 4,
-  },
-  listContent: {
+  list: {
     paddingHorizontal: 24,
     paddingBottom: 100,
   },
-  row: {
-    gap: 16,
-    marginBottom: 16,
+  bookItem: {
+    paddingVertical: 16,
   },
-  cardWrapper: {
+  bookContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  cover: {
+    width: 48,
+    height: 72,
+    borderRadius: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  coverLetter: {
+    fontSize: 20,
+    fontWeight: '300',
+  },
+  bookInfo: {
     flex: 1,
-    maxWidth: CARD_WIDTH,
+    marginLeft: 16,
   },
-  emptyContainer: {
+  bookTitle: {
+    fontSize: 16,
+    fontWeight: '400',
+    letterSpacing: -0.3,
+  },
+  bookAuthor: {
+    fontSize: 14,
+    fontWeight: '300',
+    marginTop: 2,
+  },
+  progressContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  progressBar: {
+    flex: 1,
+    height: 2,
+    borderRadius: 1,
+    marginRight: 8,
+  },
+  progressFill: {
+    height: '100%',
+    borderRadius: 1,
+  },
+  progressText: {
+    fontSize: 11,
+    fontWeight: '300',
+  },
+  separator: {
+    height: 1,
+  },
+  emptyState: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 48,
-    paddingBottom: 100,
-  },
-  emptyIcon: {
-    width: 96,
-    height: 96,
-    borderRadius: 48,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 24,
   },
   emptyTitle: {
-    fontSize: 20,
-    fontWeight: '600',
-    textAlign: 'center',
-    marginBottom: 8,
+    fontSize: 18,
+    fontWeight: '300',
+    letterSpacing: -0.3,
   },
   emptySubtitle: {
-    fontSize: 15,
+    fontSize: 14,
+    fontWeight: '300',
+    marginTop: 8,
     textAlign: 'center',
-    lineHeight: 22,
-    marginBottom: 32,
   },
   discoverButton: {
+    marginTop: 32,
     paddingHorizontal: 24,
-    paddingVertical: 14,
-    borderRadius: 12,
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderRadius: 24,
   },
   discoverButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  loadingContainer: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
+    fontSize: 14,
+    fontWeight: '400',
+    letterSpacing: -0.2,
   },
   loadingText: {
-    fontSize: 15,
+    fontSize: 14,
+    fontWeight: '300',
   },
 });

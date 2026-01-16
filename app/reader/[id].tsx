@@ -5,99 +5,81 @@ import {
   TouchableOpacity, 
   StyleSheet, 
   Dimensions,
-  Platform,
 } from 'react-native';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
-import { useKeepAwake } from 'expo-keep-awake';
-import Animated, { 
-  useSharedValue, 
-  useAnimatedStyle, 
-  withTiming,
-  runOnJS,
-} from 'react-native-reanimated';
-import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { ScreenContainer } from '@/components/screen-container';
 import { useColors } from '@/hooks/use-colors';
 import { useLibrary } from '@/lib/library-context';
-import { IconSymbol } from '@/components/ui/icon-symbol';
+import { useKeepAwake } from 'expo-keep-awake';
 import * as Haptics from 'expo-haptics';
+import { Platform } from 'react-native';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import { runOnJS } from 'react-native-reanimated';
 
-const { height: SCREEN_HEIGHT } = Dimensions.get('window');
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 export default function ReaderScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const params = useLocalSearchParams<{ id: string }>();
   const colors = useColors();
   const router = useRouter();
   const { getBook, settings, updateBookProgress, incrementWordsRead } = useLibrary();
   
   useKeepAwake();
 
-  const book = getBook(id || '');
+  const book = getBook(params.id || '');
   const words = book?.content?.split(/\s+/).filter(w => w.length > 0) || [];
   
   const [currentIndex, setCurrentIndex] = useState(book?.currentPosition || 0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [wpm, setWpm] = useState(settings.wordsPerMinute);
-  const [showControls, setShowControls] = useState(true);
   
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const wordsReadRef = useRef(0);
-  const controlsOpacity = useSharedValue(1);
 
-  // Calculate interval from WPM
-  const intervalMs = Math.round(60000 / wpm);
-
-  // Get font size based on settings
-  const getFontSize = () => {
-    switch (settings.fontSize) {
-      case 'small': return 36;
-      case 'large': return 56;
-      default: return 46;
-    }
-  };
-
-  // Find ORP (Optimal Recognition Point) - typically around 1/3 of word
+  // Calculate ORP (Optimal Recognition Point) index
   const getORPIndex = (word: string): number => {
     const len = word.length;
     if (len <= 1) return 0;
     if (len <= 5) return Math.floor(len / 3);
-    if (len <= 9) return Math.floor(len / 3);
     return Math.floor(len / 3);
   };
 
-  // Render word with ORP highlighting
-  const renderWord = (word: string) => {
-    const orpIndex = getORPIndex(word);
-    const before = word.slice(0, orpIndex);
-    const orp = word[orpIndex] || '';
-    const after = word.slice(orpIndex + 1);
+  const currentWord = words[currentIndex] || '';
+  const orpIndex = getORPIndex(currentWord);
 
-    return (
-      <View style={styles.wordContainer}>
-        <Text style={[styles.word, { color: colors.foreground, fontSize: getFontSize() }]}>
-          {before}
-        </Text>
-        <Text style={[styles.word, styles.orpLetter, { color: colors.accent, fontSize: getFontSize() }]}>
-          {orp}
-        </Text>
-        <Text style={[styles.word, { color: colors.foreground, fontSize: getFontSize() }]}>
-          {after}
-        </Text>
-      </View>
-    );
-  };
+  // Progress percentage
+  const progress = words.length > 0 ? (currentIndex / words.length) * 100 : 0;
 
-  // Play/Pause logic
-  const togglePlay = useCallback(() => {
+  const play = useCallback(() => {
+    if (currentIndex >= words.length - 1) {
+      setCurrentIndex(0);
+    }
+    setIsPlaying(true);
     if (Platform.OS !== 'web') {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
-    setIsPlaying(prev => !prev);
+  }, [currentIndex, words.length]);
+
+  const pause = useCallback(() => {
+    setIsPlaying(false);
+    if (Platform.OS !== 'web') {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
   }, []);
+
+  const togglePlayPause = useCallback(() => {
+    if (isPlaying) {
+      pause();
+    } else {
+      play();
+    }
+  }, [isPlaying, play, pause]);
 
   // Handle word advancement
   useEffect(() => {
     if (isPlaying && words.length > 0) {
+      const interval = Math.round(60000 / wpm);
+      
       intervalRef.current = setInterval(() => {
         setCurrentIndex(prev => {
           if (prev >= words.length - 1) {
@@ -107,20 +89,15 @@ export default function ReaderScreen() {
           wordsReadRef.current += 1;
           return prev + 1;
         });
-      }, intervalMs);
-    } else {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-        intervalRef.current = null;
-      }
-    }
+      }, interval);
 
-    return () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-      }
-    };
-  }, [isPlaying, intervalMs, words.length]);
+      return () => {
+        if (intervalRef.current) {
+          clearInterval(intervalRef.current);
+        }
+      };
+    }
+  }, [isPlaying, wpm, words.length]);
 
   // Save progress periodically
   useEffect(() => {
@@ -147,167 +124,133 @@ export default function ReaderScreen() {
         }
       }
     };
-  }, [book, currentIndex, updateBookProgress, incrementWordsRead]);
-
-  // Speed adjustment with swipe
-  const adjustSpeed = useCallback((delta: number) => {
-    setWpm(prev => {
-      const newWpm = Math.max(100, Math.min(800, prev + delta));
-      if (Platform.OS !== 'web') {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      }
-      return newWpm;
-    });
-    // Show controls briefly
-    controlsOpacity.value = withTiming(1, { duration: 150 });
-    setShowControls(true);
-  }, [controlsOpacity]);
-
-  // Gesture handlers
-  const tapGesture = Gesture.Tap()
-    .runOnJS(true)
-    .onEnd(() => {
-      togglePlay();
-    });
-
-  const panGesture = Gesture.Pan()
-    .runOnJS(true)
-    .onEnd((event) => {
-      const { translationY } = event;
-      if (Math.abs(translationY) > 30) {
-        // Swipe up = faster, swipe down = slower
-        const delta = translationY < 0 ? 50 : -50;
-        adjustSpeed(delta);
-      }
-    });
-
-  const composedGesture = Gesture.Race(tapGesture, panGesture);
+  }, []);
 
   const handleBack = () => {
     if (Platform.OS !== 'web') {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
-    // Save progress before leaving
-    if (book && currentIndex > 0) {
+    if (book) {
       updateBookProgress(book.id, currentIndex);
-      if (wordsReadRef.current > 0) {
-        incrementWordsRead(wordsReadRef.current);
-      }
     }
     router.back();
   };
 
-  const controlsStyle = useAnimatedStyle(() => ({
-    opacity: controlsOpacity.value,
-  }));
+  const adjustSpeed = useCallback((delta: number) => {
+    setWpm(prev => Math.max(100, Math.min(800, prev + delta)));
+    if (Platform.OS !== 'web') {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+  }, []);
 
-  const progress = words.length > 0 ? (currentIndex / words.length) * 100 : 0;
-  const currentWord = words[currentIndex] || '';
+  // Gesture handlers
+  const tapGesture = Gesture.Tap()
+    .runOnJS(true)
+    .onEnd(() => {
+      togglePlayPause();
+    });
+
+  const panGesture = Gesture.Pan()
+    .runOnJS(true)
+    .onEnd((event) => {
+      if (Math.abs(event.translationX) > 50) {
+        if (event.translationX > 0) {
+          adjustSpeed(-50);
+        } else {
+          adjustSpeed(50);
+        }
+      }
+    });
+
+  const composedGesture = Gesture.Race(tapGesture, panGesture);
 
   if (!book || !book.content) {
     return (
       <>
         <Stack.Screen options={{ headerShown: false }} />
-        <ScreenContainer edges={['top', 'left', 'right', 'bottom']} className="flex-1">
-          <View style={styles.errorContainer}>
-            <Text style={[styles.errorText, { color: colors.foreground }]}>
-              Book content not available
-            </Text>
-            <TouchableOpacity
-              onPress={handleBack}
-              style={[styles.errorButton, { backgroundColor: colors.primary }]}
-              activeOpacity={0.8}
-            >
-              <Text style={[styles.errorButtonText, { color: colors.background }]}>
-                Go Back
-              </Text>
-            </TouchableOpacity>
-          </View>
+        <ScreenContainer edges={['top', 'left', 'right', 'bottom']} className="flex-1 items-center justify-center">
+          <Text style={[styles.loadingText, { color: colors.muted }]}>
+            Loading...
+          </Text>
         </ScreenContainer>
       </>
     );
   }
 
+  // Render word with ORP highlight
+  const renderWord = () => {
+    if (!currentWord) return null;
+    
+    const before = currentWord.slice(0, orpIndex);
+    const orp = currentWord[orpIndex] || '';
+    const after = currentWord.slice(orpIndex + 1);
+
+    return (
+      <View style={styles.wordContainer}>
+        <Text style={[styles.word, { color: colors.foreground }]}>
+          {before}
+          <Text style={[styles.orpChar, { color: colors.muted }]}>{orp}</Text>
+          {after}
+        </Text>
+      </View>
+    );
+  };
+
   return (
     <>
       <Stack.Screen options={{ headerShown: false }} />
-      <ScreenContainer 
-        edges={['top', 'left', 'right', 'bottom']} 
-        containerClassName="bg-background"
-        className="flex-1"
-      >
+      <ScreenContainer edges={['top', 'left', 'right', 'bottom']} className="flex-1">
         {/* Header */}
-        <Animated.View style={[styles.header, controlsStyle]}>
+        <View style={styles.header}>
           <TouchableOpacity
             onPress={handleBack}
-            style={[styles.backButton, { backgroundColor: colors.surface }]}
-            activeOpacity={0.7}
+            style={styles.backButton}
+            activeOpacity={0.6}
           >
-            <IconSymbol name="chevron.left" size={24} color={colors.foreground} />
+            <Text style={[styles.backText, { color: colors.foreground }]}>←</Text>
           </TouchableOpacity>
-          <View style={styles.headerInfo}>
-            <Text 
-              style={[styles.bookTitle, { color: colors.foreground }]} 
-              numberOfLines={1}
-            >
-              {book.title}
-            </Text>
-          </View>
-          <View style={styles.headerSpacer} />
-        </Animated.View>
+          <Text style={[styles.wpmDisplay, { color: colors.muted }]}>
+            {wpm} wpm
+          </Text>
+        </View>
 
-        {/* RSVP Display */}
+        {/* Main reading area */}
         <GestureDetector gesture={composedGesture}>
-          <View style={styles.readerContainer}>
-            {/* ORP Guide Line */}
-            <View style={[styles.orpGuide, { backgroundColor: colors.accent }]} />
+          <View style={styles.readerArea}>
+            {/* ORP guide line */}
+            <View style={[styles.orpLine, { backgroundColor: colors.border }]} />
             
-            {/* Word Display */}
-            <View style={styles.wordDisplay}>
-              {renderWord(currentWord)}
-            </View>
+            {/* Word display */}
+            {renderWord()}
 
-            {/* Play/Pause Indicator */}
-            {!isPlaying && (
-              <View style={styles.pauseIndicator}>
-                <IconSymbol name="play.fill" size={32} color={colors.muted} />
-                <Text style={[styles.pauseText, { color: colors.muted }]}>
-                  Tap to {currentIndex === 0 ? 'start' : 'resume'}
-                </Text>
-              </View>
-            )}
+            {/* Play/Pause indicator */}
+            <Text style={[styles.statusText, { color: colors.muted }]}>
+              {isPlaying ? '' : 'tap to start'}
+            </Text>
           </View>
         </GestureDetector>
 
-        {/* Footer Controls */}
-        <Animated.View style={[styles.footer, controlsStyle]}>
-          {/* Speed Display */}
-          <View style={[styles.speedBadge, { backgroundColor: colors.surface }]}>
-            <Text style={[styles.speedText, { color: colors.foreground }]}>
-              {wpm} wpm
-            </Text>
-          </View>
-
-          {/* Progress Bar */}
-          <View style={[styles.progressContainer, { backgroundColor: colors.surface }]}>
+        {/* Footer */}
+        <View style={styles.footer}>
+          {/* Progress bar */}
+          <View style={[styles.progressBar, { backgroundColor: colors.border }]}>
             <View 
               style={[
                 styles.progressFill, 
-                { backgroundColor: colors.primary, width: `${progress}%` }
+                { backgroundColor: colors.foreground, width: `${progress}%` }
               ]} 
             />
           </View>
-
-          {/* Word Count */}
-          <Text style={[styles.wordCount, { color: colors.muted }]}>
-            {currentIndex + 1} / {words.length}
-          </Text>
-
-          {/* Hint */}
-          <Text style={[styles.hint, { color: colors.muted }]}>
-            Swipe up/down to adjust speed
-          </Text>
-        </Animated.View>
+          
+          <View style={styles.footerInfo}>
+            <Text style={[styles.progressText, { color: colors.muted }]}>
+              {Math.round(progress)}%
+            </Text>
+            <Text style={[styles.bookTitle, { color: colors.muted }]} numberOfLines={1}>
+              {book.title}
+            </Text>
+          </View>
+        </View>
       </ScreenContainer>
     </>
   );
@@ -317,113 +260,86 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
+    justifyContent: 'space-between',
+    paddingHorizontal: 24,
     paddingVertical: 8,
   },
   backButton: {
     width: 44,
     height: 44,
-    borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  headerInfo: {
+  backText: {
+    fontSize: 24,
+    fontWeight: '300',
+  },
+  wpmDisplay: {
+    fontSize: 13,
+    fontWeight: '300',
+  },
+  readerArea: {
     flex: 1,
-    paddingHorizontal: 12,
-  },
-  bookTitle: {
-    fontSize: 17,
-    fontWeight: '600',
-    textAlign: 'center',
-  },
-  headerSpacer: {
-    width: 44,
-  },
-  readerContainer: {
-    flex: 1,
-    justifyContent: 'center',
     alignItems: 'center',
+    justifyContent: 'center',
   },
-  orpGuide: {
+  orpLine: {
     position: 'absolute',
-    width: 2,
-    height: 80,
-    opacity: 0.3,
-  },
-  wordDisplay: {
-    paddingHorizontal: 24,
+    width: 1,
+    height: 120,
+    left: SCREEN_WIDTH / 2,
   },
   wordContainer: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
+    alignItems: 'center',
     justifyContent: 'center',
+    minHeight: 80,
   },
   word: {
-    fontWeight: '400',
+    fontSize: 36,
+    fontWeight: '300',
     letterSpacing: 1,
   },
-  orpLetter: {
-    fontWeight: '700',
+  orpChar: {
+    fontWeight: '500',
   },
-  pauseIndicator: {
+  statusText: {
     position: 'absolute',
     bottom: 80,
-    alignItems: 'center',
-    gap: 8,
-  },
-  pauseText: {
-    fontSize: 14,
+    fontSize: 12,
+    fontWeight: '300',
+    letterSpacing: 1,
   },
   footer: {
     paddingHorizontal: 24,
     paddingBottom: 32,
-    alignItems: 'center',
-    gap: 12,
   },
-  speedBadge: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-  },
-  speedText: {
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  progressContainer: {
-    width: '100%',
-    height: 4,
-    borderRadius: 2,
-    overflow: 'hidden',
+  progressBar: {
+    height: 2,
+    borderRadius: 1,
+    marginBottom: 12,
   },
   progressFill: {
     height: '100%',
-    borderRadius: 2,
+    borderRadius: 1,
   },
-  wordCount: {
-    fontSize: 13,
-  },
-  hint: {
-    fontSize: 12,
-    marginTop: 4,
-  },
-  errorContainer: {
-    flex: 1,
+  footerInfo: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 48,
-    gap: 24,
   },
-  errorText: {
-    fontSize: 17,
-    textAlign: 'center',
+  progressText: {
+    fontSize: 12,
+    fontWeight: '300',
   },
-  errorButton: {
-    paddingHorizontal: 24,
-    paddingVertical: 14,
-    borderRadius: 12,
+  bookTitle: {
+    fontSize: 12,
+    fontWeight: '300',
+    flex: 1,
+    textAlign: 'right',
+    marginLeft: 16,
   },
-  errorButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
+  loadingText: {
+    fontSize: 14,
+    fontWeight: '300',
   },
 });

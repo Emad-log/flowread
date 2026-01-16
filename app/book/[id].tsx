@@ -12,7 +12,6 @@ import { Image } from 'expo-image';
 import { ScreenContainer } from '@/components/screen-container';
 import { useColors } from '@/hooks/use-colors';
 import { useLibrary } from '@/lib/library-context';
-import { IconSymbol } from '@/components/ui/icon-symbol';
 import { fetchBookContent } from '@/lib/open-library';
 import { Book } from '@/types';
 import * as Haptics from 'expo-haptics';
@@ -31,7 +30,6 @@ export default function BookDetailScreen() {
   }>();
   
   const [isAdding, setIsAdding] = useState(false);
-  const [isDownloading, setIsDownloading] = useState(false);
   const colors = useColors();
   const router = useRouter();
   const { books, addBook, updateBookContent } = useLibrary();
@@ -56,13 +54,9 @@ export default function BookDetailScreen() {
     }
     
     setIsAdding(true);
-    setIsDownloading(true);
     
     try {
-      // Add book to library first
       await addBook(book);
-      
-      // Then fetch content
       const content = await fetchBookContent(book.id, book.title);
       if (content) {
         await updateBookContent(book.id, content);
@@ -75,7 +69,6 @@ export default function BookDetailScreen() {
       console.error('Failed to add book:', error);
     } finally {
       setIsAdding(false);
-      setIsDownloading(false);
     }
   };
 
@@ -101,10 +94,10 @@ export default function BookDetailScreen() {
         <View style={styles.header}>
           <TouchableOpacity
             onPress={handleBack}
-            style={[styles.backButton, { backgroundColor: colors.surface }]}
-            activeOpacity={0.7}
+            style={styles.backButton}
+            activeOpacity={0.6}
           >
-            <IconSymbol name="chevron.left" size={24} color={colors.foreground} />
+            <Text style={[styles.backText, { color: colors.foreground }]}>←</Text>
           </TouchableOpacity>
         </View>
 
@@ -122,8 +115,8 @@ export default function BookDetailScreen() {
                 transition={200}
               />
             ) : (
-              <View style={[styles.cover, styles.placeholderCover, { backgroundColor: colors.surface }]}>
-                <Text style={[styles.placeholderText, { color: colors.muted }]}>
+              <View style={[styles.cover, { backgroundColor: colors.surface }]}>
+                <Text style={[styles.coverLetter, { color: colors.muted }]}>
                   {book.title.charAt(0)}
                 </Text>
               </View>
@@ -135,22 +128,10 @@ export default function BookDetailScreen() {
             <Text style={[styles.title, { color: colors.foreground }]}>{book.title}</Text>
             <Text style={[styles.author, { color: colors.muted }]}>{book.author}</Text>
             
-            {(book.publishYear || book.pageCount) && (
-              <View style={styles.meta}>
-                {book.publishYear && (
-                  <Text style={[styles.metaText, { color: colors.muted }]}>
-                    {book.publishYear}
-                  </Text>
-                )}
-                {book.publishYear && book.pageCount && (
-                  <Text style={[styles.metaDot, { color: colors.muted }]}>•</Text>
-                )}
-                {book.pageCount && (
-                  <Text style={[styles.metaText, { color: colors.muted }]}>
-                    {book.pageCount} pages
-                  </Text>
-                )}
-              </View>
+            {book.publishYear && (
+              <Text style={[styles.year, { color: colors.muted }]}>
+                {book.publishYear}
+              </Text>
             )}
 
             {book.description && (
@@ -158,70 +139,49 @@ export default function BookDetailScreen() {
                 {book.description}
               </Text>
             )}
-
-            {book.subjects.length > 0 && (
-              <View style={styles.subjects}>
-                {book.subjects.slice(0, 4).map((subject, index) => (
-                  <View 
-                    key={index} 
-                    style={[styles.subjectTag, { backgroundColor: colors.surface, borderColor: colors.border }]}
-                  >
-                    <Text style={[styles.subjectText, { color: colors.muted }]}>
-                      {subject}
-                    </Text>
-                  </View>
-                ))}
-              </View>
-            )}
           </View>
         </ScrollView>
 
-        {/* Action Buttons */}
-        <View style={[styles.actions, { backgroundColor: colors.background, borderTopColor: colors.border }]}>
+        {/* Action Button */}
+        <View style={[styles.actions, { borderTopColor: colors.border }]}>
           {isInLibrary ? (
             <TouchableOpacity
               onPress={handleStartReading}
-              style={[styles.primaryButton, { backgroundColor: colors.primary }]}
-              activeOpacity={0.8}
+              style={[styles.primaryButton, { borderColor: colors.foreground }]}
+              activeOpacity={0.6}
               disabled={!existingBook?.content}
             >
               {existingBook?.content ? (
-                <>
-                  <IconSymbol name="play.fill" size={20} color={colors.background} />
-                  <Text style={[styles.primaryButtonText, { color: colors.background }]}>
-                    {existingBook.currentPosition ? 'Continue Reading' : 'Start Reading'}
-                  </Text>
-                </>
+                <Text style={[styles.primaryButtonText, { color: colors.foreground }]}>
+                  {existingBook.currentPosition ? 'Continue' : 'Read'}
+                </Text>
               ) : (
-                <>
-                  <ActivityIndicator size="small" color={colors.background} />
-                  <Text style={[styles.primaryButtonText, { color: colors.background }]}>
-                    Downloading...
+                <View style={styles.loadingRow}>
+                  <ActivityIndicator size="small" color={colors.muted} />
+                  <Text style={[styles.primaryButtonText, { color: colors.muted }]}>
+                    Loading...
                   </Text>
-                </>
+                </View>
               )}
             </TouchableOpacity>
           ) : (
             <TouchableOpacity
               onPress={handleAddToLibrary}
-              style={[styles.primaryButton, { backgroundColor: colors.primary }]}
-              activeOpacity={0.8}
+              style={[styles.primaryButton, { borderColor: colors.foreground }]}
+              activeOpacity={0.6}
               disabled={isAdding}
             >
               {isAdding ? (
-                <>
-                  <ActivityIndicator size="small" color={colors.background} />
-                  <Text style={[styles.primaryButtonText, { color: colors.background }]}>
-                    {isDownloading ? 'Downloading...' : 'Adding...'}
+                <View style={styles.loadingRow}>
+                  <ActivityIndicator size="small" color={colors.muted} />
+                  <Text style={[styles.primaryButtonText, { color: colors.muted }]}>
+                    Adding...
                   </Text>
-                </>
+                </View>
               ) : (
-                <>
-                  <IconSymbol name="plus" size={20} color={colors.background} />
-                  <Text style={[styles.primaryButtonText, { color: colors.background }]}>
-                    Add to Library
-                  </Text>
-                </>
+                <Text style={[styles.primaryButtonText, { color: colors.foreground }]}>
+                  Add to Library
+                </Text>
               )}
             </TouchableOpacity>
           )}
@@ -233,15 +193,18 @@ export default function BookDetailScreen() {
 
 const styles = StyleSheet.create({
   header: {
-    paddingHorizontal: 16,
+    paddingHorizontal: 24,
     paddingVertical: 8,
   },
   backButton: {
     width: 44,
     height: 44,
-    borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  backText: {
+    fontSize: 24,
+    fontWeight: '300',
   },
   content: {
     paddingBottom: 120,
@@ -251,70 +214,43 @@ const styles = StyleSheet.create({
     paddingVertical: 24,
   },
   cover: {
-    width: 180,
-    height: 270,
-    borderRadius: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.15,
-    shadowRadius: 16,
-    elevation: 8,
-  },
-  placeholderCover: {
+    width: 140,
+    height: 210,
+    borderRadius: 4,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  placeholderText: {
-    fontSize: 64,
-    fontWeight: '300',
+  coverLetter: {
+    fontSize: 48,
+    fontWeight: '200',
   },
   info: {
     paddingHorizontal: 24,
     alignItems: 'center',
   },
   title: {
-    fontSize: 24,
-    fontWeight: '700',
+    fontSize: 22,
+    fontWeight: '400',
     textAlign: 'center',
     letterSpacing: -0.5,
   },
   author: {
-    fontSize: 17,
+    fontSize: 15,
+    fontWeight: '300',
     marginTop: 8,
     textAlign: 'center',
   },
-  meta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 12,
-  },
-  metaText: {
-    fontSize: 14,
-  },
-  metaDot: {
-    marginHorizontal: 8,
+  year: {
+    fontSize: 13,
+    fontWeight: '300',
+    marginTop: 8,
   },
   description: {
-    fontSize: 15,
-    lineHeight: 24,
+    fontSize: 14,
+    fontWeight: '300',
+    lineHeight: 22,
     marginTop: 24,
     textAlign: 'center',
-  },
-  subjects: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'center',
-    gap: 8,
-    marginTop: 20,
-  },
-  subjectTag: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-    borderWidth: 0.5,
-  },
-  subjectText: {
-    fontSize: 12,
   },
   actions: {
     position: 'absolute',
@@ -324,18 +260,23 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingTop: 16,
     paddingBottom: 32,
-    borderTopWidth: 0.5,
+    borderTopWidth: 1,
   },
   primaryButton: {
-    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 16,
-    borderRadius: 14,
-    gap: 8,
+    paddingVertical: 14,
+    borderRadius: 24,
+    borderWidth: 1,
   },
   primaryButtonText: {
-    fontSize: 17,
-    fontWeight: '600',
+    fontSize: 15,
+    fontWeight: '400',
+    letterSpacing: -0.2,
+  },
+  loadingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
 });

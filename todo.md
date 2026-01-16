@@ -21,3 +21,11 @@
 - [x] Generate custom app logo
 - [x] Update app branding in config
 - [x] Fix bug: Books not being added to library
+- [x] Update theme to pure white/grey minimal palette
+- [x] Simplify Library screen UI
+- [x] Simplify Discover screen UI
+- [x] Simplify Settings screen UI
+- [x] Simplify Book Detail screen UI
+- [x] Simplify RSVP Reader screen UI
+- [x] Generate new ultra-minimal logo
+- [x] Update app branding with new logo
