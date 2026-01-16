@@ -29,3 +29,6 @@
 - [x] Simplify RSVP Reader screen UI
 - [x] Generate new ultra-minimal logo
 - [x] Update app branding with new logo
+- [x] Add progress scrubber/slider to navigate within book
+- [x] Add chapter/section selector modal
+- [x] Show current position indicator (word X of Y)
