@@ -1,11 +1,11 @@
-import { useRef, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, Platform, FlatList, Dimensions } from 'react-native';
+import { useRef, useEffect, useCallback, useState } from 'react';
+import { View, Text, StyleSheet, Platform, ScrollView, Dimensions, TouchableOpacity } from 'react-native';
 import * as Haptics from 'expo-haptics';
 
 const MIN_WPM = 100;
 const MAX_WPM = 800;
 const WPM_STEP = 25;
-const ITEM_WIDTH = 50;
+const ITEM_WIDTH = 40;
 
 interface RulerPickerProps {
   value: number;
@@ -22,9 +22,9 @@ export function RulerPicker({
   mutedColor,
   borderColor,
 }: RulerPickerProps) {
-  const flatListRef = useRef<FlatList>(null);
+  const scrollViewRef = useRef<ScrollView>(null);
   const lastHapticValue = useRef(value);
-  const isScrolling = useRef(false);
+  const [screenWidth, setScreenWidth] = useState(Dimensions.get('window').width);
   
   // Generate WPM values
   const values: number[] = [];
@@ -38,25 +38,24 @@ export function RulerPicker({
     }
   }, []);
 
-  // Scroll to initial value
+  // Calculate offset for a given value
+  const getOffsetForValue = useCallback((wpm: number) => {
+    const index = values.indexOf(wpm);
+    if (index === -1) return 0;
+    return index * ITEM_WIDTH;
+  }, [values]);
+
+  // Scroll to initial value on mount
   useEffect(() => {
-    const index = values.indexOf(value);
-    if (index >= 0 && flatListRef.current && !isScrolling.current) {
-      setTimeout(() => {
-        flatListRef.current?.scrollToIndex({
-          index,
-          animated: false,
-          viewPosition: 0.5,
-        });
-      }, 100);
-    }
+    const offset = getOffsetForValue(value);
+    setTimeout(() => {
+      scrollViewRef.current?.scrollTo({ x: offset, animated: false });
+    }, 50);
   }, []);
 
   const handleScroll = useCallback((event: any) => {
     const offsetX = event.nativeEvent.contentOffset.x;
-    const screenWidth = Dimensions.get('window').width;
-    const centerOffset = offsetX + (screenWidth / 2) - (ITEM_WIDTH / 2);
-    const index = Math.round(centerOffset / ITEM_WIDTH);
+    const index = Math.round(offsetX / ITEM_WIDTH);
     const clampedIndex = Math.max(0, Math.min(values.length - 1, index));
     const newValue = values[clampedIndex];
     
@@ -67,64 +66,23 @@ export function RulerPicker({
     }
   }, [values, onChange, triggerHaptic]);
 
-  const handleScrollBegin = () => {
-    isScrolling.current = true;
-  };
-
   const handleScrollEnd = useCallback((event: any) => {
-    isScrolling.current = false;
     const offsetX = event.nativeEvent.contentOffset.x;
-    const screenWidth = Dimensions.get('window').width;
-    const centerOffset = offsetX + (screenWidth / 2) - (ITEM_WIDTH / 2);
-    const index = Math.round(centerOffset / ITEM_WIDTH);
+    const index = Math.round(offsetX / ITEM_WIDTH);
     const clampedIndex = Math.max(0, Math.min(values.length - 1, index));
+    const snapOffset = clampedIndex * ITEM_WIDTH;
     
     // Snap to nearest value
-    flatListRef.current?.scrollToIndex({
-      index: clampedIndex,
-      animated: true,
-      viewPosition: 0.5,
-    });
+    scrollViewRef.current?.scrollTo({ x: snapOffset, animated: true });
   }, [values]);
 
-  const getItemLayout = (_: any, index: number) => ({
-    length: ITEM_WIDTH,
-    offset: ITEM_WIDTH * index,
-    index,
-  });
+  const handleItemPress = useCallback((wpm: number) => {
+    const offset = getOffsetForValue(wpm);
+    scrollViewRef.current?.scrollTo({ x: offset, animated: true });
+    triggerHaptic();
+    onChange(wpm);
+  }, [getOffsetForValue, onChange, triggerHaptic]);
 
-  const renderItem = ({ item, index }: { item: number; index: number }) => {
-    const isSelected = item === value;
-    const isMajor = item % 100 === 0;
-    
-    return (
-      <View style={styles.itemContainer}>
-        <View style={styles.tickContainer}>
-          <View 
-            style={[
-              styles.tick,
-              { 
-                backgroundColor: isSelected ? foregroundColor : borderColor,
-                height: isMajor ? 24 : 12,
-              }
-            ]} 
-          />
-        </View>
-        {isMajor && (
-          <Text 
-            style={[
-              styles.label,
-              { color: isSelected ? foregroundColor : mutedColor }
-            ]}
-          >
-            {item}
-          </Text>
-        )}
-      </View>
-    );
-  };
-
-  const screenWidth = Dimensions.get('window').width;
   const sidePadding = (screenWidth - ITEM_WIDTH) / 2;
 
   return (
@@ -137,30 +95,65 @@ export function RulerPicker({
       
       {/* Ruler */}
       <View style={styles.rulerContainer}>
-        {/* Center indicator */}
-        <View style={[styles.centerIndicator, { backgroundColor: foregroundColor }]} />
+        {/* Center indicator line */}
+        <View 
+          style={[
+            styles.centerIndicator, 
+            { backgroundColor: foregroundColor, left: screenWidth / 2 - 0.5 }
+          ]} 
+          pointerEvents="none"
+        />
         
-        <FlatList
-          ref={flatListRef}
-          data={values}
-          renderItem={renderItem}
-          keyExtractor={(item) => item.toString()}
+        <ScrollView
+          ref={scrollViewRef}
           horizontal
           showsHorizontalScrollIndicator={false}
           snapToInterval={ITEM_WIDTH}
           decelerationRate="fast"
           onScroll={handleScroll}
-          onScrollBeginDrag={handleScrollBegin}
           onMomentumScrollEnd={handleScrollEnd}
           onScrollEndDrag={handleScrollEnd}
           scrollEventThrottle={16}
-          getItemLayout={getItemLayout}
           contentContainerStyle={{ 
             paddingHorizontal: sidePadding,
           }}
-          initialScrollIndex={Math.max(0, values.indexOf(value))}
-          onScrollToIndexFailed={() => {}}
-        />
+        >
+          {values.map((wpm) => {
+            const isSelected = wpm === value;
+            const isMajor = wpm % 100 === 0;
+            
+            return (
+              <TouchableOpacity
+                key={wpm}
+                onPress={() => handleItemPress(wpm)}
+                style={styles.itemContainer}
+                activeOpacity={0.7}
+              >
+                <View style={styles.tickContainer}>
+                  <View 
+                    style={[
+                      styles.tick,
+                      { 
+                        backgroundColor: isSelected ? foregroundColor : borderColor,
+                        height: isMajor ? 20 : 10,
+                      }
+                    ]} 
+                  />
+                </View>
+                {isMajor && (
+                  <Text 
+                    style={[
+                      styles.label,
+                      { color: isSelected ? foregroundColor : mutedColor }
+                    ]}
+                  >
+                    {wpm}
+                  </Text>
+                )}
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
       </View>
       
       {/* Hint */}
@@ -171,35 +164,33 @@ export function RulerPicker({
 
 const styles = StyleSheet.create({
   container: {
-    paddingVertical: 16,
+    paddingVertical: 12,
   },
   valueContainer: {
     flexDirection: 'row',
     alignItems: 'baseline',
     justifyContent: 'center',
-    marginBottom: 16,
+    marginBottom: 12,
     gap: 4,
   },
   value: {
-    fontSize: 48,
+    fontSize: 40,
     fontWeight: '200',
     letterSpacing: -2,
   },
   unit: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '300',
   },
   rulerContainer: {
-    height: 60,
+    height: 50,
     position: 'relative',
   },
   centerIndicator: {
     position: 'absolute',
     top: 0,
-    left: '50%',
-    marginLeft: -0.5,
     width: 1,
-    height: 32,
+    height: 28,
     zIndex: 10,
   },
   itemContainer: {
@@ -207,21 +198,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   tickContainer: {
-    height: 24,
+    height: 20,
     justifyContent: 'flex-end',
   },
   tick: {
     width: 1,
   },
   label: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '300',
     marginTop: 4,
   },
   hint: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '300',
     textAlign: 'center',
-    marginTop: 8,
+    marginTop: 6,
   },
 });

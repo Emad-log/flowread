@@ -52,4 +52,6 @@
 - [x] Update GitHub with fixed dial
 - [x] Replace circular dial with scrollable ruler picker
 - [x] Set light mode as default appearance
-- [ ] Update GitHub with changes
+- [x] Update GitHub with changes
+- [x] Fix ruler picker scrolling not working
+- [ ] Update GitHub with fix
