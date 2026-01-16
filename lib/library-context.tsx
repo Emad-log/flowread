@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Book, ReadingSettings, ReadingStats, DEFAULT_SETTINGS, DEFAULT_STATS } from '@/types';
 
@@ -29,6 +29,24 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
   const [stats, setStats] = useState<ReadingStats>(DEFAULT_STATS);
   const [isLoading, setIsLoading] = useState(true);
 
+  // Use refs to always have access to latest state in callbacks
+  const booksRef = useRef(books);
+  const settingsRef = useRef(settings);
+  const statsRef = useRef(stats);
+
+  // Keep refs in sync with state
+  useEffect(() => {
+    booksRef.current = books;
+  }, [books]);
+
+  useEffect(() => {
+    settingsRef.current = settings;
+  }, [settings]);
+
+  useEffect(() => {
+    statsRef.current = stats;
+  }, [stats]);
+
   // Load data from AsyncStorage on mount
   useEffect(() => {
     const loadData = async () => {
@@ -39,9 +57,21 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
           AsyncStorage.getItem(STATS_KEY),
         ]);
 
-        if (libraryData) setBooks(JSON.parse(libraryData));
-        if (settingsData) setSettings({ ...DEFAULT_SETTINGS, ...JSON.parse(settingsData) });
-        if (statsData) setStats({ ...DEFAULT_STATS, ...JSON.parse(statsData) });
+        if (libraryData) {
+          const parsed = JSON.parse(libraryData);
+          setBooks(parsed);
+          booksRef.current = parsed;
+        }
+        if (settingsData) {
+          const parsed = { ...DEFAULT_SETTINGS, ...JSON.parse(settingsData) };
+          setSettings(parsed);
+          settingsRef.current = parsed;
+        }
+        if (statsData) {
+          const parsed = { ...DEFAULT_STATS, ...JSON.parse(statsData) };
+          setStats(parsed);
+          statsRef.current = parsed;
+        }
       } catch (error) {
         console.error('Failed to load library data:', error);
       } finally {
@@ -61,68 +91,85 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const addBook = useCallback(async (book: Book) => {
+    // Check if book already exists
+    if (booksRef.current.some(b => b.id === book.id)) {
+      console.log('Book already in library:', book.id);
+      return;
+    }
+    
     const newBook = { ...book, addedAt: Date.now() };
-    const newBooks = [...books, newBook];
+    const newBooks = [...booksRef.current, newBook];
+    
+    // Update ref immediately
+    booksRef.current = newBooks;
     setBooks(newBooks);
     await saveBooks(newBooks);
-  }, [books, saveBooks]);
+    console.log('Book added to library:', book.title);
+  }, [saveBooks]);
 
   const removeBook = useCallback(async (bookId: string) => {
-    const newBooks = books.filter(b => b.id !== bookId);
+    const newBooks = booksRef.current.filter(b => b.id !== bookId);
+    booksRef.current = newBooks;
     setBooks(newBooks);
     await saveBooks(newBooks);
-  }, [books, saveBooks]);
+  }, [saveBooks]);
 
   const updateBookProgress = useCallback(async (bookId: string, position: number) => {
-    const newBooks = books.map(b => 
+    const newBooks = booksRef.current.map(b => 
       b.id === bookId ? { ...b, currentPosition: position } : b
     );
+    booksRef.current = newBooks;
     setBooks(newBooks);
     await saveBooks(newBooks);
-  }, [books, saveBooks]);
+  }, [saveBooks]);
 
   const updateBookContent = useCallback(async (bookId: string, content: string) => {
     const words = content.split(/\s+/).filter(w => w.length > 0);
-    const newBooks = books.map(b => 
+    const newBooks = booksRef.current.map(b => 
       b.id === bookId ? { ...b, content, totalWords: words.length } : b
     );
+    booksRef.current = newBooks;
     setBooks(newBooks);
     await saveBooks(newBooks);
-  }, [books, saveBooks]);
+    console.log('Book content updated:', bookId, 'words:', words.length);
+  }, [saveBooks]);
 
   const getBook = useCallback((bookId: string) => {
-    return books.find(b => b.id === bookId);
-  }, [books]);
+    return booksRef.current.find(b => b.id === bookId);
+  }, []);
 
   const updateSettings = useCallback(async (newSettings: Partial<ReadingSettings>) => {
-    const updated = { ...settings, ...newSettings };
+    const updated = { ...settingsRef.current, ...newSettings };
+    settingsRef.current = updated;
     setSettings(updated);
     try {
       await AsyncStorage.setItem(SETTINGS_KEY, JSON.stringify(updated));
     } catch (error) {
       console.error('Failed to save settings:', error);
     }
-  }, [settings]);
+  }, []);
 
   const updateStats = useCallback(async (newStats: Partial<ReadingStats>) => {
-    const updated = { ...stats, ...newStats };
+    const updated = { ...statsRef.current, ...newStats };
+    statsRef.current = updated;
     setStats(updated);
     try {
       await AsyncStorage.setItem(STATS_KEY, JSON.stringify(updated));
     } catch (error) {
       console.error('Failed to save stats:', error);
     }
-  }, [stats]);
+  }, []);
 
   const incrementWordsRead = useCallback(async (count: number) => {
-    const updated = { ...stats, totalWordsRead: stats.totalWordsRead + count };
+    const updated = { ...statsRef.current, totalWordsRead: statsRef.current.totalWordsRead + count };
+    statsRef.current = updated;
     setStats(updated);
     try {
       await AsyncStorage.setItem(STATS_KEY, JSON.stringify(updated));
     } catch (error) {
       console.error('Failed to save stats:', error);
     }
-  }, [stats]);
+  }, []);
 
   return (
     <LibraryContext.Provider

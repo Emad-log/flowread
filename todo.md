@@ -20,3 +20,4 @@
 - [x] Add haptic feedback on interactions
 - [x] Generate custom app logo
 - [x] Update app branding in config
+- [x] Fix bug: Books not being added to library
