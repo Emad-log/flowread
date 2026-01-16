@@ -13,13 +13,12 @@ import { ScreenContainer } from '@/components/screen-container';
 import { useColors } from '@/hooks/use-colors';
 import { useLibrary } from '@/lib/library-context';
 import { useKeepAwake } from 'expo-keep-awake';
-import { SpeedSlider } from '@/components/speed-slider';
 import * as Haptics from 'expo-haptics';
 import { Platform } from 'react-native';
-import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const WORDS_PER_PAGE = 250;
+const SPEED_OPTIONS = [150, 200, 250, 300, 400, 500, 600];
 
 interface Chapter {
   title: string;
@@ -45,7 +44,7 @@ export default function ReaderScreen() {
   const [wpm, setWpm] = useState(settings.wordsPerMinute);
   const [showNavigator, setShowNavigator] = useState(false);
   const [showChapters, setShowChapters] = useState(false);
-  const [showSpeedSlider, setShowSpeedSlider] = useState(false);
+  const [showSpeedPicker, setShowSpeedPicker] = useState(false);
   
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const wordsReadRef = useRef(0);
@@ -100,24 +99,26 @@ export default function ReaderScreen() {
   const orpIndex = getORPIndex(currentWord);
   const progress = words.length > 0 ? (currentIndex / words.length) * 100 : 0;
 
+  const triggerHaptic = useCallback(() => {
+    if (Platform.OS !== 'web') {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+  }, []);
+
   const play = useCallback(() => {
     if (currentIndex >= words.length - 1) {
       setCurrentIndex(0);
     }
     setIsPlaying(true);
     setShowNavigator(false);
-    setShowSpeedSlider(false);
-    if (Platform.OS !== 'web') {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    }
-  }, [currentIndex, words.length]);
+    setShowSpeedPicker(false);
+    triggerHaptic();
+  }, [currentIndex, words.length, triggerHaptic]);
 
   const pause = useCallback(() => {
     setIsPlaying(false);
-    if (Platform.OS !== 'web') {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    }
-  }, []);
+    triggerHaptic();
+  }, [triggerHaptic]);
 
   const togglePlayPause = useCallback(() => {
     if (isPlaying) {
@@ -179,9 +180,7 @@ export default function ReaderScreen() {
   }, []);
 
   const handleBack = () => {
-    if (Platform.OS !== 'web') {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    }
+    triggerHaptic();
     if (book) {
       updateBookProgress(book.id, currentIndex);
     }
@@ -198,13 +197,17 @@ export default function ReaderScreen() {
     router.replace(`/normal-reader/${params.id}`);
   };
 
+  const handleSpeedSelect = useCallback((speed: number) => {
+    setWpm(speed);
+    setShowSpeedPicker(false);
+    triggerHaptic();
+  }, [triggerHaptic]);
+
   const jumpToPosition = useCallback((index: number) => {
     const clampedIndex = Math.max(0, Math.min(words.length - 1, index));
     setCurrentIndex(clampedIndex);
-    if (Platform.OS !== 'web') {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    }
-  }, [words.length]);
+    triggerHaptic();
+  }, [words.length, triggerHaptic]);
 
   const jumpToPage = useCallback((page: number) => {
     const index = (page - 1) * WORDS_PER_PAGE;
@@ -221,28 +224,16 @@ export default function ReaderScreen() {
       pause();
     }
     setShowNavigator(prev => !prev);
-    setShowSpeedSlider(false);
+    setShowSpeedPicker(false);
   }, [isPlaying, pause]);
 
-  const toggleSpeedSlider = useCallback(() => {
+  const toggleSpeedPicker = useCallback(() => {
     if (isPlaying) {
       pause();
     }
-    setShowSpeedSlider(prev => !prev);
+    setShowSpeedPicker(prev => !prev);
     setShowNavigator(false);
   }, [isPlaying, pause]);
-
-  // Gesture handlers
-  const tapGesture = Gesture.Tap()
-    .runOnJS(true)
-    .onEnd(() => {
-      if (showNavigator || showSpeedSlider) {
-        setShowNavigator(false);
-        setShowSpeedSlider(false);
-      } else {
-        togglePlayPause();
-      }
-    });
 
   // Handle slider drag
   const handleSliderPress = (event: any) => {
@@ -294,7 +285,7 @@ export default function ReaderScreen() {
           <TouchableOpacity
             onPress={handleBack}
             style={styles.backButton}
-            activeOpacity={0.6}
+            activeOpacity={0.5}
           >
             <Text style={[styles.backText, { color: colors.foreground }]}>←</Text>
           </TouchableOpacity>
@@ -302,61 +293,72 @@ export default function ReaderScreen() {
           <View style={styles.headerRight}>
             <TouchableOpacity
               onPress={handleSwitchToNormal}
-              style={[styles.modeButton, { borderColor: colors.border }]}
-              activeOpacity={0.6}
+              activeOpacity={0.5}
             >
-              <Text style={[styles.modeButtonText, { color: colors.muted }]}>Normal</Text>
+              <Text style={[styles.headerLink, { color: colors.muted }]}>Normal</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              onPress={toggleSpeedSlider}
-              style={styles.wpmButton}
-              activeOpacity={0.6}
+              onPress={toggleSpeedPicker}
+              activeOpacity={0.5}
             >
-              <Text style={[styles.wpmDisplay, { color: showSpeedSlider ? colors.foreground : colors.muted }]}>
-                {wpm} wpm
+              <Text style={[styles.headerLink, { color: showSpeedPicker ? colors.foreground : colors.muted }]}>
+                {wpm}
               </Text>
             </TouchableOpacity>
           </View>
         </View>
 
-        {/* Main reading area */}
-        <GestureDetector gesture={tapGesture}>
-          <View style={styles.readerArea}>
-            {/* ORP guide line */}
-            <View style={[styles.orpLine, { backgroundColor: colors.border }]} />
-            
-            {/* Word display */}
-            {renderWord()}
-
-            {/* Status indicator */}
-            <Text style={[styles.statusText, { color: colors.muted }]}>
-              {isPlaying ? '' : 'tap to start'}
-            </Text>
-
-            {/* Position indicator */}
-            <TouchableOpacity 
-              onPress={toggleNavigator}
-              style={styles.positionButton}
-              activeOpacity={0.6}
-            >
-              <Text style={[styles.positionText, { color: colors.muted }]}>
-                {currentIndex.toLocaleString()} / {words.length.toLocaleString()}
-              </Text>
-            </TouchableOpacity>
+        {/* Speed Picker - Apple style inline */}
+        {showSpeedPicker && (
+          <View style={styles.speedPickerContainer}>
+            <View style={[styles.speedPicker, { borderColor: colors.border }]}>
+              {SPEED_OPTIONS.map((speed) => (
+                <TouchableOpacity
+                  key={speed}
+                  onPress={() => handleSpeedSelect(speed)}
+                  style={styles.speedOption}
+                  activeOpacity={0.5}
+                >
+                  <Text style={[
+                    styles.speedOptionText, 
+                    { color: speed === wpm ? colors.foreground : colors.muted }
+                  ]}>
+                    {speed}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
           </View>
-        </GestureDetector>
-
-        {/* Speed Slider - Side Panel */}
-        {showSpeedSlider && (
-          <SpeedSlider
-            value={wpm}
-            onChange={setWpm}
-            foregroundColor={colors.foreground}
-            mutedColor={colors.muted}
-            borderColor={colors.border}
-            backgroundColor={colors.background}
-          />
         )}
+
+        {/* Main reading area */}
+        <TouchableOpacity 
+          style={styles.readerArea} 
+          onPress={togglePlayPause}
+          activeOpacity={1}
+        >
+          {/* ORP guide line */}
+          <View style={[styles.orpLine, { backgroundColor: colors.border }]} />
+          
+          {/* Word display */}
+          {renderWord()}
+
+          {/* Status indicator */}
+          <Text style={[styles.statusText, { color: colors.muted }]}>
+            {isPlaying ? '' : 'tap to start'}
+          </Text>
+
+          {/* Position indicator */}
+          <TouchableOpacity 
+            onPress={toggleNavigator}
+            style={styles.positionButton}
+            activeOpacity={0.5}
+          >
+            <Text style={[styles.positionText, { color: colors.muted }]}>
+              {currentIndex.toLocaleString()} / {words.length.toLocaleString()}
+            </Text>
+          </TouchableOpacity>
+        </TouchableOpacity>
 
         {/* Navigation Panel */}
         {showNavigator && (
@@ -365,25 +367,20 @@ export default function ReaderScreen() {
             <View style={styles.pageNav}>
               <TouchableOpacity
                 onPress={() => jumpToPage(Math.max(1, currentPage - 1))}
-                style={[styles.pageButton, { borderColor: colors.border }]}
-                activeOpacity={0.6}
+                activeOpacity={0.5}
               >
-                <Text style={[styles.pageButtonText, { color: colors.foreground }]}>←</Text>
+                <Text style={[styles.navArrow, { color: colors.foreground }]}>←</Text>
               </TouchableOpacity>
               <View style={styles.pageInfo}>
                 <Text style={[styles.pageNumber, { color: colors.foreground }]}>
-                  Page {currentPage}
-                </Text>
-                <Text style={[styles.pageTotal, { color: colors.muted }]}>
-                  of {totalPages}
+                  {currentPage} / {totalPages}
                 </Text>
               </View>
               <TouchableOpacity
                 onPress={() => jumpToPage(Math.min(totalPages, currentPage + 1))}
-                style={[styles.pageButton, { borderColor: colors.border }]}
-                activeOpacity={0.6}
+                activeOpacity={0.5}
               >
-                <Text style={[styles.pageButtonText, { color: colors.foreground }]}>→</Text>
+                <Text style={[styles.navArrow, { color: colors.foreground }]}>→</Text>
               </TouchableOpacity>
             </View>
 
@@ -400,12 +397,6 @@ export default function ReaderScreen() {
                     { backgroundColor: colors.foreground, width: `${progress}%` }
                   ]} 
                 />
-                <View 
-                  style={[
-                    styles.sliderThumb, 
-                    { backgroundColor: colors.foreground, left: `${progress}%` }
-                  ]} 
-                />
               </View>
             </TouchableOpacity>
 
@@ -415,8 +406,7 @@ export default function ReaderScreen() {
                 <TouchableOpacity
                   key={percent}
                   onPress={() => jumpToPosition(Math.floor((percent / 100) * (words.length - 1)))}
-                  style={[styles.quickJumpButton, { borderColor: colors.border }]}
-                  activeOpacity={0.6}
+                  activeOpacity={0.5}
                 >
                   <Text style={[styles.quickJumpText, { color: colors.muted }]}>
                     {percent}%
@@ -431,11 +421,11 @@ export default function ReaderScreen() {
                 setShowNavigator(false);
                 setShowChapters(true);
               }}
-              style={[styles.chaptersOpenButton, { borderColor: colors.border }]}
-              activeOpacity={0.6}
+              style={styles.chaptersButton}
+              activeOpacity={0.5}
             >
-              <Text style={[styles.chaptersOpenText, { color: colors.foreground }]}>
-                View Chapters
+              <Text style={[styles.chaptersButtonText, { color: colors.muted }]}>
+                Chapters
               </Text>
             </TouchableOpacity>
           </View>
@@ -458,13 +448,10 @@ export default function ReaderScreen() {
           </TouchableOpacity>
           
           <View style={styles.footerInfo}>
-            <Text style={[styles.progressText, { color: colors.muted }]}>
+            <Text style={[styles.footerText, { color: colors.muted }]}>
               {Math.round(progress)}%
             </Text>
-            <Text style={[styles.modeLabel, { color: colors.muted }]}>
-              RSVP
-            </Text>
-            <Text style={[styles.bookTitle, { color: colors.muted }]} numberOfLines={1}>
+            <Text style={[styles.footerText, { color: colors.muted }]} numberOfLines={1}>
               {book.title}
             </Text>
           </View>
@@ -477,18 +464,22 @@ export default function ReaderScreen() {
           transparent={true}
           onRequestClose={() => setShowChapters(false)}
         >
-          <View style={[styles.modalOverlay, { backgroundColor: 'rgba(0,0,0,0.5)' }]}>
+          <View style={styles.modalOverlay}>
+            <TouchableOpacity 
+              style={styles.modalBackdrop} 
+              onPress={() => setShowChapters(false)}
+              activeOpacity={1}
+            />
             <View style={[styles.modalContent, { backgroundColor: colors.background }]}>
               <View style={styles.modalHeader}>
                 <Text style={[styles.modalTitle, { color: colors.foreground }]}>
-                  Navigate
+                  Chapters
                 </Text>
                 <TouchableOpacity
                   onPress={() => setShowChapters(false)}
-                  style={styles.modalClose}
-                  activeOpacity={0.6}
+                  activeOpacity={0.5}
                 >
-                  <Text style={[styles.modalCloseText, { color: colors.muted }]}>Done</Text>
+                  <Text style={[styles.modalClose, { color: colors.muted }]}>Done</Text>
                 </TouchableOpacity>
               </View>
               
@@ -502,11 +493,8 @@ export default function ReaderScreen() {
                   return (
                     <TouchableOpacity
                       onPress={() => jumpToChapter(item)}
-                      style={[
-                        styles.chapterItem,
-                        { borderBottomColor: colors.border }
-                      ]}
-                      activeOpacity={0.6}
+                      style={[styles.chapterItem, { borderBottomColor: colors.border }]}
+                      activeOpacity={0.5}
                     >
                       <Text 
                         style={[
@@ -539,41 +527,42 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 24,
-    paddingVertical: 8,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
   },
   backButton: {
-    width: 44,
-    height: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
+    padding: 4,
   },
   backText: {
-    fontSize: 24,
+    fontSize: 20,
     fontWeight: '300',
   },
   headerRight: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 20,
   },
-  modeButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 12,
-    borderWidth: 1,
-  },
-  modeButtonText: {
-    fontSize: 12,
+  headerLink: {
+    fontSize: 15,
     fontWeight: '400',
   },
-  wpmButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+  speedPickerContainer: {
+    paddingHorizontal: 20,
+    paddingBottom: 8,
   },
-  wpmDisplay: {
-    fontSize: 13,
-    fontWeight: '300',
+  speedPicker: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 8,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  speedOption: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  speedOptionText: {
+    fontSize: 14,
+    fontWeight: '400',
   },
   readerArea: {
     flex: 1,
@@ -582,158 +571,113 @@ const styles = StyleSheet.create({
   },
   orpLine: {
     position: 'absolute',
-    width: 1,
-    height: 120,
+    width: StyleSheet.hairlineWidth,
+    height: 100,
     left: SCREEN_WIDTH / 2,
   },
   wordContainer: {
     alignItems: 'center',
     justifyContent: 'center',
-    minHeight: 80,
+    minHeight: 60,
   },
   word: {
-    fontSize: 36,
+    fontSize: 32,
     fontWeight: '300',
-    letterSpacing: 1,
+    letterSpacing: 0.5,
   },
   orpChar: {
-    fontWeight: '500',
+    fontWeight: '400',
   },
   statusText: {
     position: 'absolute',
-    bottom: 100,
+    bottom: 80,
     fontSize: 12,
     fontWeight: '300',
-    letterSpacing: 1,
   },
   positionButton: {
     position: 'absolute',
-    bottom: 60,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+    bottom: 50,
+    padding: 8,
   },
   positionText: {
     fontSize: 11,
     fontWeight: '300',
-    letterSpacing: 0.5,
   },
   navigatorPanel: {
-    paddingHorizontal: 24,
-    paddingVertical: 20,
-    borderTopWidth: 1,
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderTopWidth: StyleSheet.hairlineWidth,
   },
   pageNav: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 20,
+    marginBottom: 16,
+    gap: 32,
   },
-  pageButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  pageButtonText: {
+  navArrow: {
     fontSize: 18,
     fontWeight: '300',
+    padding: 8,
   },
   pageInfo: {
     alignItems: 'center',
-    marginHorizontal: 24,
   },
   pageNumber: {
-    fontSize: 24,
+    fontSize: 15,
     fontWeight: '300',
-    letterSpacing: -0.5,
-  },
-  pageTotal: {
-    fontSize: 12,
-    fontWeight: '300',
-    marginTop: 2,
   },
   sliderContainer: {
     marginBottom: 16,
     paddingVertical: 8,
   },
   sliderTrack: {
-    height: 4,
-    borderRadius: 2,
-    position: 'relative',
+    height: 2,
+    borderRadius: 1,
   },
   sliderFill: {
     height: '100%',
-    borderRadius: 2,
-  },
-  sliderThumb: {
-    position: 'absolute',
-    top: -6,
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    marginLeft: -8,
+    borderRadius: 1,
   },
   quickJumps: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 16,
-  },
-  quickJumpButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 12,
-    borderWidth: 1,
+    marginBottom: 12,
   },
   quickJumpText: {
     fontSize: 12,
     fontWeight: '300',
+    padding: 4,
   },
-  chaptersOpenButton: {
+  chaptersButton: {
     alignItems: 'center',
-    paddingVertical: 12,
-    borderRadius: 8,
-    borderWidth: 1,
+    paddingVertical: 8,
   },
-  chaptersOpenText: {
+  chaptersButtonText: {
     fontSize: 14,
     fontWeight: '400',
   },
   footer: {
-    paddingHorizontal: 24,
-    paddingBottom: 32,
+    paddingHorizontal: 20,
+    paddingBottom: 24,
   },
   progressBar: {
-    height: 4,
-    borderRadius: 2,
-    marginBottom: 12,
+    height: 2,
+    borderRadius: 1,
+    marginBottom: 8,
   },
   progressFill: {
     height: '100%',
-    borderRadius: 2,
+    borderRadius: 1,
   },
   footerInfo: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  progressText: {
-    fontSize: 12,
+  footerText: {
+    fontSize: 11,
     fontWeight: '300',
-  },
-  modeLabel: {
-    fontSize: 10,
-    fontWeight: '400',
-    letterSpacing: 1,
-    textTransform: 'uppercase',
-  },
-  bookTitle: {
-    fontSize: 12,
-    fontWeight: '300',
-    flex: 1,
-    textAlign: 'right',
-    marginLeft: 16,
   },
   loadingText: {
     fontSize: 14,
@@ -743,41 +687,40 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'flex-end',
   },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.3)',
+  },
   modalContent: {
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    maxHeight: '70%',
+    borderTopLeftRadius: 12,
+    borderTopRightRadius: 12,
+    maxHeight: '60%',
   },
   modalHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 24,
+    paddingHorizontal: 20,
     paddingVertical: 16,
   },
   modalTitle: {
-    fontSize: 18,
-    fontWeight: '400',
-    letterSpacing: -0.3,
+    fontSize: 17,
+    fontWeight: '500',
   },
   modalClose: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-  },
-  modalCloseText: {
     fontSize: 15,
     fontWeight: '400',
   },
   chaptersList: {
-    paddingHorizontal: 24,
-    paddingBottom: 40,
+    paddingHorizontal: 20,
+    paddingBottom: 32,
   },
   chapterItem: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 16,
-    borderBottomWidth: 1,
+    paddingVertical: 14,
+    borderBottomWidth: StyleSheet.hairlineWidth,
   },
   chapterTitle: {
     fontSize: 15,
